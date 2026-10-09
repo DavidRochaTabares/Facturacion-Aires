@@ -112,8 +112,34 @@ op('s13', 'c1', 'additional', '2026-06-01', { provider: 'Assist Card', invoice_n
 doc('s13', 'poliza_AC87120.pdf', 120_300, '2026-06-01', 'application/pdf', 'otros')
 op('s14', 'c3', 'other', '2026-06-18', { provider: 'Migración Colombia', invoice_number: 'MC-1120', amount: 320000, charge_amount: 360000, observations: 'Gestión de documentos' }); db.additionals.push({ id: 'a-s14', operation_id: 's14', description: 'Trámite de visado' })
 
-const bank = (id: string, date: string, movement_type: string, description: string, beneficiary: string, amount: number, refs: [string, string?, string?] = [''], observation = '') =>
-  db.bank.push({ id, date, movement_type, description, beneficiary, amount, reference_1: refs[0], reference_2: refs[1] ?? '', reference_3: refs[2] ?? '', observation, created_at: date })
+
+const bank = (
+  id: string,
+  date: string,
+  movement_type: string,
+  description: string,
+  beneficiary: string,
+  amount: number,
+  refs: [string, string?, string?] = [''],
+  observation = ''
+) =>
+  db.bank.push({
+    id,
+    date,
+    bank_name: '',
+    description,
+    amount,
+    invoice_number: '',
+    client_name: '',
+    movement_type,
+    beneficiary,
+    reference_1: refs[0],
+    reference_2: refs[1] ?? '',
+    reference_3: refs[2] ?? '',
+    observation,
+    created_at: date
+  })
+
 bank('b1', '2026-09-01', 'Ingreso', 'Pago factura FV-1005', 'SENCIA S.A.S.', 2980000, ['FV-1005', 'TRF-88123'])
 bank('b2', '2026-09-03', 'Egreso', 'Pago tiquetes LATAM', 'LATAM Airlines', 1250000, ['BSP-0903'], 'Liquidación semanal')
 bank('b3', '2026-09-08', 'Egreso', 'Pago hotel', 'Hotel Caribe Plaza', 2400000, ['CP-90211', 'TRF-90044'])
@@ -122,6 +148,15 @@ bank('b5', '2026-09-15', 'Comisión bancaria', 'Cuota de manejo', 'Banco', 18500
 bank('b6', '2026-09-18', 'Transferencia', 'Traslado entre cuentas', 'Cuenta de ahorros', 1500000, ['TRF-90301'])
 bank('b7', '2026-09-22', 'Egreso', 'Pago proveedor alimentación', 'Catering Sabores', 1120000, ['FD-s11'], 'Evento Horizonte')
 bank('b8', '2026-09-29', 'Ingreso', 'Pago factura FV-1003', 'Andina Construcciones', 262000, ['FV-1003'])
-db.bankDocs.push({ id: 'bd1', movement_id: 'b2', name: 'comprobante_b2.pdf', mime_type: 'application/pdf', size: 88_000, storage_path: 'banco/b2/comprobante_b2.pdf', created_at: '2026-09-03' })
+
+db.bankDocs.push({
+  id: 'bd1',
+  movement_id: 'b2',
+  name: 'comprobante_b2.pdf',
+  mime_type: 'application/pdf',
+  size: 88_000,
+  storage_path: 'banco/b2/comprobante_b2.pdf',
+  created_at: '2026-09-03'
+})
 
 export const mockDb = db
