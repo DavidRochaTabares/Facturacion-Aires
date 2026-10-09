@@ -218,16 +218,22 @@ export interface ServiceReport {
 export interface BankMovement {
   id: string
   date: string
-  movement_type: string
+  bank_name: string
   description: string
-  beneficiary: string
   amount: number
+  invoice_number: string
+  client_name: string
+
+  // Campos históricos conservados por compatibilidad
+  movement_type: string
+  beneficiary: string
   reference_1: string
   reference_2: string
   reference_3: string
   observation: string
   created_at: string
 }
+
 export type BankMovementInput = Omit<BankMovement, 'id' | 'created_at'>
 export interface BankDocument { id: string; movement_id: string; name: string; mime_type: string; size: number; storage_path: string; created_at: string; url?: string }
 export type BankMovementRow = BankMovement & { documents: BankDocument[] }
