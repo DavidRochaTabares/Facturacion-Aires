@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils } from 'lucide-react'
+import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon } from 'lucide-react'
 import { useAuth, useTheme } from '../hooks'
+import { CalculatorPanel } from './CalculatorPanel'
 import { AgencyLogo, Loading, PoweredBy, ThemeSwitch } from './ui'
 
 const groups = [
@@ -15,6 +16,7 @@ export function ProtectedLayout() {
   const { session, loading, signOut } = useAuth()
   const { theme, toggle } = useTheme()
   const [open, setOpen] = useState(false)
+  const [calcOpen, setCalcOpen] = useState(false)
   const nav = useNavigate()
   if (loading) return <div className="min-h-screen grid place-items-center"><Loading /></div>
   if (!session) return <Navigate to="/login" replace />
@@ -34,6 +36,10 @@ export function ProtectedLayout() {
               {g.items.map(i => <NavLink key={i.to} to={i.to} className={link}><i.icon size={18} />{i.label}</NavLink>)}
             </div>
           ))}
+          <div>
+            <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">Herramientas</p>
+            <button type="button" aria-pressed={calcOpen} onClick={() => setCalcOpen(o => !o)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${calcOpen ? 'bg-brand/10 text-brand font-medium' : 'text-muted hover:bg-surface2 hover:text-fg'}`}><CalcIcon size={18} />Calculadora</button>
+          </div>
         </nav>
         <div className="shrink-0 space-y-1 border-t border-line bg-surface2/60 p-3">
           <p className="px-3 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted">Sistema</p>
@@ -51,6 +57,7 @@ export function ProtectedLayout() {
         </header>
         <main className="p-4 sm:p-6 lg:p-8 w-full"><Outlet /></main>
       </div>
+      <CalculatorPanel open={calcOpen} onClose={() => setCalcOpen(false)} />
     </div>
   )
 }
