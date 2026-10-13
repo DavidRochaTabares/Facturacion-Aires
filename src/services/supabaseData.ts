@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { SERVICE_LABEL } from '../lib/format'
-import type { BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
+import type { ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
 import { MockDataService } from './mock'
 import { bankEnumOfLabel, bankPayload, mapBankDocument, mapBankMovement, mapCompany, mapDocument, mapGroup, mapViewRow } from './supabaseMappers'
 
@@ -9,6 +9,12 @@ const pick = (i: CompanyInput): CompanyInput => ({ name: i.name, nit: i.nit, con
 const slices = (v: any, labelOf?: (key: string) => string): Slice[] =>
   (v ?? []).map((x: any) => ({ key: x.key, label: labelOf ? labelOf(x.key) : x.label, count: Number(x.count), amount: Number(x.amount) }))
 const BUCKET = 'documents'
+const MAX_DOC_BYTES = 10 * 1024 * 1024
+const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('El análisis tardó demasiado. Intenta de nuevo o llena el formulario manualmente.')), ms)
+    p.then(v => { clearTimeout(t); resolve(v) }, e => { clearTimeout(t); reject(e) })
+  })
 const safeName = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(-100)
 const warnUpload = (e: unknown) => alert(`El registro se guardó, pero no se pudo subir el archivo: ${e instanceof Error ? e.message : 'error desconocido'}. Puedes adjuntarlo de nuevo desde el detalle.`)
 const mergeOther = (list: Slice[]): Slice[] => {
@@ -196,6 +202,26 @@ export class SupabaseDataService extends MockDataService {
     if (error) fail(error)
     return { count: Number(data.count), total_amount: Number(data.total_amount), by_type: slices(data.by_type), last_date: data.last_date ?? '' }
   }
+
+  private async extract<T>(kind: 'flight' | 'hotel' | 'loan', file: File): Promise<T> {
+    const ok = file.type === 'application/pdf' || (kind === 'loan' && /^image\/(png|jpeg|webp)$/.test(file.type))
+    if (!ok) throw new Error(kind === 'loan' ? 'Formato no soportado. Usa PDF, PNG, JPG o WEBP.' : 'Solo se admiten archivos PDF.')
+    if (file.size > MAX_DOC_BYTES) throw new Error('El archivo supera los 10 MB.')
+    const body = new FormData()
+    body.append('kind', kind)
+    body.append('file', file)
+    const { data, error } = await withTimeout(supabase.functions.invoke('extract-document', { body }), 75_000)
+    if (error) {
+      let msg = error.message
+      try { const j = await (error as { context?: Response }).context?.json(); if (j?.error) msg = j.error } catch { /* keep generic message */ }
+      throw new Error(msg)
+    }
+    if (!data || typeof data !== 'object' || 'error' in data) throw new Error((data as { error?: string } | null)?.error ?? 'Respuesta inválida del análisis.')
+    return data as T
+  }
+  extractEmission(file: File): Promise<ExtractedFlight> { return this.extract('flight', file) }
+  extractHotelVoucher(file: File): Promise<ExtractedHotel> { return this.extract('hotel', file) }
+  extractLoanDocument(file: File): Promise<ExtractedLoan> { return this.extract('loan', file) }
 
   private async detailsOf(id: string, type: OperationType): Promise<any> {
     const r = await this.getOperationById(id)

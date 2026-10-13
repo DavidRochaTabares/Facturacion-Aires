@@ -37,9 +37,14 @@ export default function LoanIntake({ onBack, start = 'idle' }: { onBack: () => v
 
   const analyze = async () => {
     if (!file) return
-    setStage('processing')
-    setEx(await dataService.extractLoanDocument(file))
-    setStage('done')
+    setStage('processing'); setError('')
+    try {
+      setEx(await dataService.extractLoanDocument(file))
+      setStage('done')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo analizar el documento.')
+      setStage('selected')
+    }
   }
   const reset = () => { setFile(null); setUrl(null); setEx(null); setStage('idle') }
   const save = async (v: OperationInput) => { setBusy(true); await dataService.createOperation(v, file); nav('/prestamos') }
@@ -80,7 +85,8 @@ export default function LoanIntake({ onBack, start = 'idle' }: { onBack: () => v
         <div className="card p-5">
           {stage === 'selected' && (
             <div className="text-center py-16"><p className="font-medium">Archivo listo</p><p className="text-sm text-muted mt-1 mb-4">Revisa la vista previa y analiza el documento.</p>
-              <div className="flex justify-center gap-2"><button className="btn-primary" onClick={analyze}>Analizar documento</button><button className="btn-ghost" onClick={() => setStage('manual')}>Llenar manualmente</button></div></div>
+              <div className="flex justify-center gap-2"><button className="btn-primary" onClick={analyze}>Analizar documento</button><button className="btn-ghost" onClick={() => setStage('manual')}>Llenar manualmente</button></div>
+              {error && <p role="alert" className="text-sm text-red-500 mt-3">{error}</p>}</div>
           )}
           {stage === 'processing' && <div className="text-center py-16 text-muted flex flex-col items-center gap-3"><Spinner className="text-brand" /><p className="text-sm">Analizando documento…</p></div>}
           {stage === 'done' && initial && (

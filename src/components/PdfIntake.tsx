@@ -31,9 +31,14 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
   }
   const analyze = async () => {
     if (!file) return
-    setStage('processing')
-    setResult(type === 'flight' ? await dataService.extractEmission(file) : await dataService.extractHotelVoucher(file))
-    setStage('done')
+    setStage('processing'); setError('')
+    try {
+      setResult(type === 'flight' ? await dataService.extractEmission(file) : await dataService.extractHotelVoucher(file))
+      setStage('done')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo analizar el documento.')
+      setStage('selected')
+    }
   }
   const reset = () => { setFile(null); setUrl(null); setResult(null); setStage('idle') }
 
@@ -59,7 +64,8 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
         <div className="card p-5">
           {stage === 'selected' && (
             <div className="text-center py-16"><p className="font-medium">Archivo listo</p><p className="text-sm text-muted mt-1 mb-4">Revisa la vista previa y analiza el documento.</p>
-              <button className="btn-primary" onClick={analyze}>Analizar PDF</button></div>
+              <button className="btn-primary" onClick={analyze}>Analizar PDF</button>
+              {error && <p role="alert" className="text-sm text-red-500 mt-3">{error}</p>}</div>
           )}
           {stage === 'processing' && <div className="text-center py-16 text-muted flex flex-col items-center gap-3"><Spinner className="text-brand" /><p className="text-sm">Analizando documento…</p></div>}
           {stage === 'done' && initial && (
