@@ -1,5 +1,5 @@
 import { loanMissing } from '../lib/service'
-import type { BankDocument, BankMovementInput, BankMovementRow, Company, DocumentFile, OperationGroup, OperationRow, OperationType } from '../types'
+import type { BankDocument, BankMovementInput, BankMovementRow, Company, DocumentFile, OperationGroup, OperationRow, OperationType, PaymentCard, Supplier } from '../types'
 
 const NULLABLE = new Set([
   'value_with_taxes_tae', 'total_invoice', 'third_party_commission', 'provider_profit', 'ta', 'ta_without_iva', 'ta_with_iva', 'iva_ta', 'net_quote_minus_iva_ta',
@@ -23,6 +23,13 @@ function norm(row: any, keepId = false) {
 
 export const mapCompany = (r: any): Company => ({
   id: r.id, name: r.name ?? '', nit: r.nit ?? '', contact: r.contact ?? '', email: r.email ?? '', phone: r.phone ?? '', observations: r.observations ?? '', ta: r.ta == null ? null : Number(r.ta), created_at: day(r.created_at),
+})
+
+export const mapPaymentCard = (r: any): PaymentCard => ({
+  id: r.id, alias: r.alias ?? '', last_four: r.last_four ?? '', bank: r.bank ?? '', holder: r.holder ?? '', is_active: r.is_active !== false, created_at: day(r.created_at),
+})
+export const mapSupplier = (r: any): Supplier => ({
+  id: r.id, name: r.name ?? '', nit: r.nit ?? '', contact: r.contact ?? '', email: r.email ?? '', phone: r.phone ?? '', is_active: r.is_active !== false, created_at: day(r.created_at),
 })
 
 export const mapGroup = (g: any): OperationGroup => ({ id: g.id, code: g.code, label: g.name ?? g.label, created_at: day(g.created_at) })

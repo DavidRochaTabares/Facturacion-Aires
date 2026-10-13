@@ -57,7 +57,10 @@ export function normalizeFlight(raw: any) {
   if (!passengers.length) passengers.push({ id: rid(), names: '', surnames: '', document_type: 'CC', document_number: '', birth_date: '', email: '', phone: '', frequent_flyer: '', ticket_number: '' })
 
   const chain = segments.length && segments[0].origin ? [segments[0].origin, ...segments.map(s => s.destination)].filter(Boolean).join('-') : ''
-  const value = cop(num(raw?.total_amount), raw?.currency)
+  // The value is the total of the whole reservation; the app divides it among the passengers when saving.
+  const paxAmounts = list(raw?.passengers, 20).map((p: any) => cop(num(p?.total_amount), raw?.currency))
+  const paxSum = paxAmounts.length && paxAmounts.every(v => v != null) ? paxAmounts.reduce((acc: number, v) => acc + (v as number), 0) : null
+  const value = cop(num(raw?.total_amount), raw?.currency) ?? paxSum
   const last = segments[segments.length - 1]
   return {
     provider: str(raw?.provider),

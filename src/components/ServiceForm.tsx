@@ -1,9 +1,10 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { useAsync } from '../hooks'
-import { GROUPABLE, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
+import { GROUPABLE, isRealPassenger, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
 import { dataService } from '../services'
 import type { DetailsMap, OperationInput, OperationType, PassengerData, SegmentData } from '../types'
+import { CardSelect, SupplierSelect } from './SupplierFields'
 import { Field, Select, Spinner, TextInput } from './ui'
 
 const ValuesBox = ({ cost, charge }: { cost: ReactNode; charge: ReactNode }) => (
@@ -54,6 +55,8 @@ interface Props {
 export default function ServiceForm({ type, initial, submitLabel = 'Guardar registro', busy, onSubmit, onCancel, children }: Props) {
   const { data: companies } = useAsync(() => dataService.getCompanies(), [])
   const { data: groups } = useAsync(() => dataService.getGroups(), [])
+  const { data: suppliers } = useAsync(() => dataService.getSuppliers(), [])
+  const { data: cards } = useAsync(() => dataService.getCards(), [])
   const [c, setC] = useState({
     company_id: initial?.company_id ?? '', date: initial?.date ?? today(), provider: initial?.provider ?? '', invoice_number: initial?.invoice_number ?? '',
     amount: initial?.amount ?? 0, charge_amount: initial?.charge_amount ?? 0, observations: initial?.observations ?? '',
@@ -65,6 +68,8 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
   const [submitError, setSubmitError] = useState('')
 
   const canGroup = GROUPABLE.includes(type)
+  const editing = !!(initial as { id?: string } | undefined)?.id
+  const realPax = type === 'flight' ? (d.passengers as PassengerData[]).filter(isRealPassenger).length : 0
   const isBilled = type === 'flight' || type === 'hotel'
   const auto = MARKUP[type] !== undefined
   const pct = Math.round(((MARKUP[type] ?? 1) - 1) * 100)
@@ -247,7 +252,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
             <option value="">Seleccionar…</option>{companies?.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
           </Select>
           <TextInput label={type === 'food' ? 'Fecha de solicitud *' : 'Fecha *'} error={err.date} type="date" {...sc('date')} />
-          <TextInput label={type === 'transport' ? 'Proveedor *' : 'Proveedor'} error={err.provider} {...sc('provider')} />
+          <SupplierSelect label={type === 'transport' ? 'Proveedor *' : 'Proveedor'} error={err.provider} value={c.provider} onChange={v => setC(p => ({ ...p, provider: v }))} suppliers={suppliers} />
           {(type === 'loan' || typeLabel) && <TextInput label="Factura" warn={warn('Factura')} {...sc('invoice_number')} />}
           </div>
         </>
@@ -255,6 +260,23 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
 
       {type === 'flight' && (
         <>
+          <H>Pasajeros</H>
+          {!editing && realPax > 1 && <p className="text-xs text-muted">Se creará un registro por pasajero, agrupados por el código de reserva. El número de tiquete de cada uno es el campo «Ticket» de su tarjeta.</p>}
+          {d.passengers.map((p: PassengerData, i: number) => (
+            <div key={p.id} className="rounded-lg border border-line p-3 grid gap-3 grid-cols-2 sm:grid-cols-3 relative">
+              <TextInput label="Nombres" value={p.names} onChange={e => row('passengers', i, 'names', e.target.value)} />
+              <TextInput label="Apellidos" value={p.surnames} onChange={e => row('passengers', i, 'surnames', e.target.value)} />
+              <Select label="Tipo doc." value={p.document_type} onChange={e => row('passengers', i, 'document_type', e.target.value)}>{['CC', 'CE', 'TI', 'PA', 'NIT'].map(t => <option key={t}>{t}</option>)}</Select>
+              <TextInput label="N.º documento" value={p.document_number} onChange={e => row('passengers', i, 'document_number', e.target.value)} />
+              <TextInput label="Nacimiento" type="date" value={p.birth_date} onChange={e => row('passengers', i, 'birth_date', e.target.value)} />
+              <TextInput label="Email" type="email" value={p.email} onChange={e => row('passengers', i, 'email', e.target.value)} />
+              <TextInput label="Teléfono" value={p.phone} onChange={e => row('passengers', i, 'phone', e.target.value)} />
+              <TextInput label="Viajero frecuente" value={p.frequent_flyer} onChange={e => row('passengers', i, 'frequent_flyer', e.target.value)} />
+              <TextInput label="Ticket" value={p.ticket_number} onChange={e => row('passengers', i, 'ticket_number', e.target.value)} />
+              {d.passengers.length > 1 && <button type="button" onClick={() => del('passengers', i)} className="absolute top-2 right-2 text-muted hover:text-red-500" aria-label="Quitar pasajero"><Trash2 size={14} /></button>}
+            </div>
+          ))}
+          {(!editing || d.passengers.length > 1) && <button type="button" className="btn-ghost" onClick={() => add('passengers')}><Plus size={14} />Agregar pasajero</button>}
           <H>Itinerario</H>
           <div className={grid}>
             <TextInput className="sm:col-span-2" label="Ruta" placeholder="BOG-MDE-BOG" {...tv('route')} />
@@ -280,33 +302,18 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
             <TextInput label="Código de reserva INT" {...tv('internal_booking_code')} />
             <TextInput label="Número de tiquete" {...tv('ticket_number')} />
           </div>
-          <H>Pasajeros</H>
-          {d.passengers.map((p: PassengerData, i: number) => (
-            <div key={p.id} className="rounded-lg border border-line p-3 grid gap-3 grid-cols-2 sm:grid-cols-3 relative">
-              <TextInput label="Nombres" value={p.names} onChange={e => row('passengers', i, 'names', e.target.value)} />
-              <TextInput label="Apellidos" value={p.surnames} onChange={e => row('passengers', i, 'surnames', e.target.value)} />
-              <Select label="Tipo doc." value={p.document_type} onChange={e => row('passengers', i, 'document_type', e.target.value)}>{['CC', 'CE', 'TI', 'PA', 'NIT'].map(t => <option key={t}>{t}</option>)}</Select>
-              <TextInput label="N.º documento" value={p.document_number} onChange={e => row('passengers', i, 'document_number', e.target.value)} />
-              <TextInput label="Nacimiento" type="date" value={p.birth_date} onChange={e => row('passengers', i, 'birth_date', e.target.value)} />
-              <TextInput label="Email" type="email" value={p.email} onChange={e => row('passengers', i, 'email', e.target.value)} />
-              <TextInput label="Teléfono" value={p.phone} onChange={e => row('passengers', i, 'phone', e.target.value)} />
-              <TextInput label="Viajero frecuente" value={p.frequent_flyer} onChange={e => row('passengers', i, 'frequent_flyer', e.target.value)} />
-              <TextInput label="Ticket" value={p.ticket_number} onChange={e => row('passengers', i, 'ticket_number', e.target.value)} />
-              {d.passengers.length > 1 && <button type="button" onClick={() => del('passengers', i)} className="absolute top-2 right-2 text-muted hover:text-red-500" aria-label="Quitar pasajero"><Trash2 size={14} /></button>}
-            </div>
-          ))}
-          <button type="button" className="btn-ghost" onClick={() => add('passengers')}><Plus size={14} />Agregar pasajero</button>
           {billing(
             [<TextInput label="Valor TKT con impuestos TA y FEE" {...nv('value_with_taxes_tae')} />, <TextInput label="Factura de compra" {...tv('purchase_invoice')} />],
             [chargeField, totalField])}
+          {!editing && realPax > 1 && <p className="text-xs text-muted">Estos valores son el total de la reserva: al guardar se dividen entre los {realPax} pasajeros (con ajuste de redondeo para que la suma coincida). Luego puedes editar el valor de cada pasajero en su propia fila.</p>}
           <H>Comisiones y ganancias</H>
           {commissionFields}
           <H>Impuestos / TA</H>
           {taxGrid}
           <H>Proveedor</H>
           <div className={grid}>
-            <TextInput label="Número tarjeta" {...tv('card_number')} />
-            <TextInput label="Proveedor" {...sc('provider')} />
+            <CardSelect label="Número tarjeta" value={d.card_number ?? ''} onChange={v => setD((p: any) => ({ ...p, card_number: v }))} cards={cards} />
+            <SupplierSelect label="Proveedor" value={c.provider} onChange={v => setC(p => ({ ...p, provider: v }))} suppliers={suppliers} />
           </div>
         </>
       )}

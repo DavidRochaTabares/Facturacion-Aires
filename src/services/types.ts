@@ -1,6 +1,6 @@
 import type {
   AuthSession, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, ExtractedFlight, ExtractedHotel, ExtractedLoan,
-  OperationFilters, OperationGroup, OperationInput, OperationInputOf, OperationRow, ServiceReport, BankDocument,
+  DeleteResult, DeleteSummary, OperationFilters, OperationGroup, OperationInput, OperationInputOf, OperationRow, ServiceReport, BankDocument, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
 } from '../types'
 
 export interface AuthService {
@@ -21,8 +21,19 @@ export interface DataService {
   getOperationById(id: string): Promise<OperationRow | null>
   createOperation(input: OperationInput, file?: File | null): Promise<OperationRow>
   updateOperation(id: string, input: OperationInput): Promise<OperationRow>
+  deleteOperations(ids: string[]): Promise<DeleteSummary>
+  deleteBankMovement(id: string): Promise<DeleteSummary>
   getGroups(): Promise<OperationGroup[]>
   getProviders(): Promise<string[]>
+
+  getSuppliers(): Promise<Supplier[]>
+  createSupplier(input: SupplierInput): Promise<Supplier>
+  updateSupplier(id: string, input: SupplierInput): Promise<Supplier>
+  deleteSupplier(id: string): Promise<DeleteResult>
+  getCards(): Promise<PaymentCard[]>
+  createCard(input: PaymentCardInput): Promise<PaymentCard>
+  updateCard(id: string, input: PaymentCardInput): Promise<PaymentCard>
+  deleteCard(id: string): Promise<DeleteResult>
 
   getFlight(operationId: string): Promise<OperationInputOf<'flight'>['details'] | null>
   createFlight(input: OperationInputOf<'flight'>, file?: File | null): Promise<OperationRow>

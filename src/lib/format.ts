@@ -10,3 +10,6 @@ export const money = (n: number | null | undefined) => new Intl.NumberFormat('es
 export const fdate = (d?: string) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—')
 export const fsize = (b: number) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`)
 export const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]?.slice(0, 3)} ${ym.slice(0, 4)}`
+
+/** Text stored in flights.card_number when a registered card is picked (same format as supplier_card_label() in SQL). */
+export const cardLabel = (c: { alias: string; last_four: string }) => `${c.alias.trim()} ****${c.last_four}`

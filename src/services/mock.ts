@@ -3,7 +3,7 @@ import { SERVICE_LABEL } from '../lib/format'
 import { GROUPABLE, loanMissing } from '../lib/service'
 import type {
   BankDocument, BankFilters, BankMovementInput, BankMovementRow, Company, CompanyInput, DocumentFile, ExtractedFlight, ExtractedHotel, ExtractedLoan,
-  Operation, OperationFilters, OperationInput, OperationRow, Slice,
+  DeleteResult, DeleteSummary, Operation, OperationFilters, OperationInput, OperationRow, Slice, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
 } from '../types'
 import type { DataService } from './types'
 
@@ -27,6 +27,8 @@ const strip = ({ id: _i, operation_id: _o, ...rest }: any) => rest
 
 export class MockDataService implements DataService {
   private db: MockDb = structuredClone(mockDb)
+  private suppliers: Supplier[] = []
+  private cards: PaymentCard[] = []
 
   private details(o: Operation): any {
     const d = this.db
@@ -131,7 +133,47 @@ export class MockDataService implements DataService {
     this.saveDetails(o, input.details)
     return wait(this.compose(o), 400)
   }
+  async deleteOperations(ids: string[]): Promise<DeleteSummary> {
+    const gone = new Set(ids), d = this.db
+    d.operations = d.operations.filter(o => !gone.has(o.id))
+    d.documents = d.documents.filter(x => !gone.has(x.operation_id))
+    return wait({ deleted: ids.length, filesNotRemoved: 0 })
+  }
+  async deleteBankMovement(id: string): Promise<DeleteSummary> {
+    this.db.bank = this.db.bank.filter(m => m.id !== id)
+    return wait({ deleted: 1, filesNotRemoved: 0 })
+  }
   getGroups() { return wait(this.db.groups) }
+  getSuppliers() { return wait([...this.suppliers].sort((a, b) => a.name.localeCompare(b.name))) }
+  async createSupplier(input: SupplierInput) {
+    const s: Supplier = { ...input, id: uid(), created_at: todayStr() }
+    this.suppliers.push(s)
+    return wait(s)
+  }
+  async updateSupplier(id: string, input: SupplierInput) {
+    const i = this.suppliers.findIndex(x => x.id === id)
+    this.suppliers[i] = { ...this.suppliers[i], ...input }
+    return wait(this.suppliers[i])
+  }
+  async deleteSupplier(id: string): Promise<DeleteResult> {
+    this.suppliers = this.suppliers.filter(x => x.id !== id)
+    return wait('deleted' as const)
+  }
+  getCards() { return wait([...this.cards].sort((a, b) => a.alias.localeCompare(b.alias))) }
+  async createCard(input: PaymentCardInput) {
+    const c: PaymentCard = { ...input, id: uid(), created_at: todayStr() }
+    this.cards.push(c)
+    return wait(c)
+  }
+  async updateCard(id: string, input: PaymentCardInput) {
+    const i = this.cards.findIndex(c => c.id === id)
+    this.cards[i] = { ...this.cards[i], ...input }
+    return wait(this.cards[i])
+  }
+  async deleteCard(id: string): Promise<DeleteResult> {
+    this.cards = this.cards.filter(c => c.id !== id)
+    return wait('deleted' as const)
+  }
   getProviders() {
     const set = new Set(this.db.operations.map(o => o.provider).filter(Boolean))
     this.db.flights.forEach(f => f.airline && set.add(f.airline))

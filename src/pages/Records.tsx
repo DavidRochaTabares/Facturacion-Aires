@@ -1,12 +1,13 @@
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, Plus, FilterX, ChevronDown, ChevronRight, Paperclip, Pencil } from 'lucide-react'
+import { AlertTriangle, Plus, FilterX, ChevronDown, ChevronRight, Paperclip, Pencil, Trash2 } from 'lucide-react'
+import { DeleteDialog } from '../components/DeleteDialog'
 import ServiceDetail from '../components/ServiceDetail'
 import { Empty, FilterBar, Loading, PageHeader, Select, TypeBadge } from '../components/ui'
 import { useAsync, useDebounced } from '../hooks'
 import { fdate, money, MONTHS, SERVICE_LABEL, SERVICE_TYPES } from '../lib/format'
 import { SECTIONS, type SectionKey } from '../lib/sections'
-import { summary } from '../lib/service'
+import { reservationKey, summary } from '../lib/service'
 import { dataService } from '../services'
 import type { OperationFilters, OperationRow, OperationType } from '../types'
 
@@ -70,6 +71,10 @@ export default function Records({ section }: { section?: SectionKey }) {
   const [params, setParams] = useSearchParams()
   const [f, setF] = useState<OperationFilters>({ company_id: params.get('empresa') ?? '' })
   const [selected, setSelected] = useState<{ id: string; edit: boolean } | null>(null)
+  const [del, setDel] = useState<OperationRow[] | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
+  const [delError, setDelError] = useState('')
+  const [notice, setNotice] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const set = (k: keyof OperationFilters) => (e: { target: { value: string } }) => { setF(p => ({ ...p, [k]: e.target.value })); if (k === 'company_id') setParams(e.target.value ? { empresa: e.target.value } : {}) }
   const q = useDebounced(f.search)
@@ -84,15 +89,35 @@ export default function Records({ section }: { section?: SectionKey }) {
   const shown = useMemo(() => (rows ?? []).filter(r => types.length < 2 || types.includes(r.type)), [rows, types])
   const items = useMemo(() => {
     const seen = new Set<string>()
-    const out: ({ group: NonNullable<OperationRow['group']>; members: OperationRow[] } | { row: OperationRow })[] = []
+    const seenRes = new Set<string>()
+    const resCount = new Map<string, number>()
+    shown.forEach(r => { const k = !r.group ? reservationKey(r) : ''; if (k) resCount.set(k, (resCount.get(k) ?? 0) + 1) })
+    const out: ({ group: NonNullable<OperationRow['group']>; members: OperationRow[] } | { res: string; members: OperationRow[] } | { row: OperationRow })[] = []
     shown.forEach(r => {
-      if (!r.group) return out.push({ row: r })
+      if (!r.group) {
+        const k = reservationKey(r)
+        if (!k || (resCount.get(k) ?? 0) < 2) return out.push({ row: r })
+        if (seenRes.has(k)) return
+        seenRes.add(k)
+        return out.push({ res: k, members: shown.filter(x => !x.group && reservationKey(x) === k) })
+      }
       if (seen.has(r.group.id)) return
       seen.add(r.group.id)
       out.push({ group: r.group, members: shown.filter(x => x.group_id === r.group!.id) })
     })
     return out
   }, [shown])
+  const askDelete = (rows: OperationRow[]) => { setDel(rows); setDelError('') }
+  const confirmDelete = async () => {
+    if (!del) return
+    setDelBusy(true); setDelError('')
+    try {
+      const r = await dataService.deleteOperations(del.map(x => x.id))
+      setNotice(`${r.deleted === 1 ? 'Se eliminó 1 registro' : `Se eliminaron ${r.deleted} registros`}.${r.filesNotRemoved ? ` No se pudieron borrar ${r.filesNotRemoved} archivo(s) del almacenamiento; el registro sí se eliminó.` : ''}`)
+      if (selected && del.some(x => x.id === selected.id)) setSelected(null)
+      setDel(null); reload()
+    } catch (e) { setDelError(e instanceof Error ? e.message : 'No se pudo eliminar. No se borró nada.') } finally { setDelBusy(false) }
+  }
   const toggle = (id: string) => setCollapsed(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
   const colSpan = cur.cols.length + 2
   const flight = cur.key === 'flight'
@@ -106,14 +131,34 @@ export default function Records({ section }: { section?: SectionKey }) {
         </td>
       ))}
       <td className="td !px-2 !py-1.5 text-muted">{r.documents.length > 0 && <Paperclip size={14} aria-label="Con documentos" />}</td>
-      <td className="td !px-2 !py-1.5 text-muted"><button title="Editar" aria-label="Editar" className="p-1 rounded hover:bg-surface2 hover:text-fg" onClick={e => { e.stopPropagation(); setSelected({ id: r.id, edit: true }) }}><Pencil size={15} /></button></td>
+      <td className="td !px-2 !py-1.5 text-muted"><button title="Editar" aria-label="Editar" className="p-1 rounded hover:bg-surface2 hover:text-fg" onClick={e => { e.stopPropagation(); setSelected({ id: r.id, edit: true }) }}><Pencil size={15} /></button>
+        <button title="Eliminar" aria-label="Eliminar" className="p-1 rounded hover:bg-red-500/10 hover:text-red-600" onClick={e => { e.stopPropagation(); askDelete([r]) }}><Trash2 size={15} /></button></td>
     </tr>
   )
+
+  const reservation = (it: { res: string; members: OperationRow[] }) => {
+    const id = `res:${it.res}`, d0 = it.members[0].details as any, closed = collapsed.has(id)
+    return (
+      <Fragment key={id}>
+        <tr onClick={() => toggle(id)} className="cursor-pointer bg-brand/5 hover:bg-brand/10">
+          <td colSpan={colSpan} className="px-2 py-2 text-[13px] font-medium">
+            <span className="flex flex-wrap items-center gap-2">{closed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+              <span className="rounded bg-brand/15 px-1.5 py-0.5 text-xs text-brand">RESERVA {d0.booking_code}</span>{[d0.airline, d0.route].filter(Boolean).join(' · ')}
+              <span className="text-muted font-normal">· {it.members.length} pasajeros · {money(it.members.reduce((a, x) => a + x.charge_amount, 0))} a cobrar · {money(it.members.reduce((a, x) => a + x.amount, 0))} costo</span>
+              <button title="Eliminar reserva completa" aria-label="Eliminar reserva completa" className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-normal text-muted hover:bg-red-500/10 hover:text-red-600" onClick={e => { e.stopPropagation(); askDelete(it.members) }}><Trash2 size={14} />Eliminar reserva</button></span>
+            {closed && <span className="mt-1 block pl-6 text-xs font-normal text-muted">{it.members.map(x => `${(x.details as any).names ?? ''} ${(x.details as any).first_surname ?? ''}`.trim() || '—').join('  |  ')}</span>}
+          </td>
+        </tr>
+        {!closed && it.members.map((m, i) => line(m, i === it.members.length - 1 ? '└ ' : '├ ', true))}
+      </Fragment>
+    )
+  }
 
   return (
     <>
       <PageHeader title={sec?.title ?? 'Registros'} subtitle={`${shown.length} registros`}
         actions={sec && <Link to={`${sec.path}/nuevo`} className="btn-primary"><Plus size={16} />{sec.newLabel}</Link>} />
+      {notice && <p role="status" className="mb-4 rounded-lg border border-line bg-surface2 p-3 text-sm">{notice}</p>}
       <FilterBar search={f.search ?? ''} onSearch={v => setF(p => ({ ...p, search: v }))} active={Object.entries(f).filter(([k, x]) => k !== 'search' && x).length}>
         <div className="md:w-48"><Select value={f.company_id} onChange={set('company_id')}><option value="">Todas las empresas</option>{companies?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></div>
         {!section && <div className="md:w-44"><Select value={f.type ?? ''} onChange={set('type')}><option value="">Todos los tipos</option>{SERVICE_TYPES.map(t => <option key={t} value={t}>{SERVICE_LABEL[t]}</option>)}</Select></div>}
@@ -132,7 +177,7 @@ export default function Records({ section }: { section?: SectionKey }) {
         {loading ? <Loading /> : shown.length === 0 ? <Empty>No hay registros con estos filtros.</Empty> : (
           <div className={`overflow-auto ${flight ? 'max-h-[72vh]' : ''}`}><table className={`w-full text-[13px] ${flight ? 'min-w-max' : ''}`}>
             <thead><tr className="border-b border-line bg-surface2/50">{cur.cols.map(c => <th key={c.h} style={c.sticky ? { left: c.sticky } : undefined} className={`th !px-2 ${c.right ? 'text-right' : ''} ${flight ? `sticky top-0 bg-surface2 ${c.sticky ? 'z-20' : 'z-10'}` : ''}`}>{c.h}</th>)}<th className={`th !px-2 ${flight ? 'sticky top-0 z-10 bg-surface2' : ''}`}>Doc.</th><th className={`th !px-2 ${flight ? 'sticky top-0 z-10 bg-surface2' : ''}`}>Acciones</th></tr></thead>
-            <tbody className="divide-y divide-line">{items.map(it => 'row' in it ? line(it.row) : (
+            <tbody className="divide-y divide-line">{items.map(it => 'row' in it ? line(it.row) : 'res' in it ? reservation(it) : (
               <Fragment key={it.group.id}>
                 <tr onClick={() => toggle(it.group.id)} className="cursor-pointer bg-brand/5 hover:bg-brand/10">
                   <td colSpan={colSpan} className="px-2 py-2 text-[13px] font-medium">
@@ -148,6 +193,14 @@ export default function Records({ section }: { section?: SectionKey }) {
           </table></div>
         )}
       </div>
+      <DeleteDialog open={!!del} title={del && del.length > 1 ? 'Eliminar reserva completa' : 'Eliminar registro'} busy={delBusy} error={delError} onCancel={() => setDel(null)} onConfirm={confirmDelete}>
+        {del?.map(r => {
+          const s = summary(r)
+          return <p key={r.id} className="py-0.5"><b>{SERVICE_LABEL[r.type]}</b> · {fdate(r.date)} · {r.company_name} · {s.client || s.route || r.provider || '—'}{s.booking ? ` · ${s.booking}` : ''} · {money(r.charge_amount)}</p>
+        })}
+        {del && del.length > 1 && <p className="mt-2 text-muted">Se eliminarán los {del.length} pasajeros de esta reserva.</p>}
+        {del?.length === 1 && reservationKey(del[0]) && (rows ?? []).some(x => x.id !== del[0].id && reservationKey(x) === reservationKey(del[0])) && <p className="mt-2 text-muted">Pertenece a una reserva con más pasajeros: los demás conservan sus valores y no se modifican.</p>}
+      </DeleteDialog>
       <ServiceDetail id={selected?.id ?? null} startEdit={selected?.edit} onClose={() => setSelected(null)} onChanged={reload} onNavigate={id => setSelected({ id, edit: false })} />
     </>
   )

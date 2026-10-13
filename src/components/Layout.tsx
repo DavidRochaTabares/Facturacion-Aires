@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon } from 'lucide-react'
+import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard } from 'lucide-react'
 import { useAuth, useTheme } from '../hooks'
 import { CalculatorPanel } from './CalculatorPanel'
 import { AgencyLogo, Loading, PoweredBy, ThemeSwitch } from './ui'
@@ -8,8 +8,7 @@ import { AgencyLogo, Loading, PoweredBy, ThemeSwitch } from './ui'
 const groups = [
   { title: 'General', items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/registros', label: 'Registros', icon: ListChecks }] },
   { title: 'Operaciones', items: [{ to: '/vuelos', label: 'Vuelos', icon: Plane }, { to: '/hoteles', label: 'Hoteles', icon: BedDouble }, { to: '/prestamos', label: 'Préstamos', icon: HandCoins }, { to: '/alimentacion', label: 'Alimentación', icon: Utensils }, { to: '/transporte', label: 'Transporte', icon: Bus }, { to: '/otros', label: 'Servicios adicionales', icon: Sparkles }] },
-  { title: 'Consultar', items: [{ to: '/empresas', label: 'Empresas', icon: Building2 }, { to: '/reportes', label: 'Reportes', icon: BarChart3 }] },
-  { title: 'Banco', items: [{ to: '/movimientos-bancarios', label: 'Movimientos bancarios', icon: Landmark }] },
+  { title: 'Administrar', items: [{ to: '/empresas', label: 'Empresas', icon: Building2 }, { to: '/proveedores-tarjetas', label: 'Proveedores y tarjetas', icon: CreditCard }, { to: '/reportes', label: 'Reportes', icon: BarChart3 }, { to: '/movimientos-bancarios', label: 'Banco', icon: Landmark }] },
 ]
 
 export function ProtectedLayout() {

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Eye, FilterX, FileText, Paperclip, Pencil, Plus } from 'lucide-react'
+import { Eye, FilterX, FileText, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
+import { DeleteDialog } from '../components/DeleteDialog'
 import { Drawer, Empty, FilePreview, FilterBar, Loading, Modal, PageHeader, Select, Spinner, TextInput } from '../components/ui'
 import { useAsync, useDebounced } from '../hooks'
 import { fdate, fsize, money } from '../lib/format'
@@ -37,6 +38,20 @@ export default function BankMovements() {
 
   const [detail, setDetail] = useState<string | null>(null)
   const [editing, setEditing] = useState<BankMovementRow | 'new' | null>(null)
+  const [del, setDel] = useState<BankMovementRow | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
+  const [delError, setDelError] = useState('')
+  const [notice, setNotice] = useState('')
+  const confirmDelete = async () => {
+    if (!del) return
+    setDelBusy(true); setDelError('')
+    try {
+      const r = await dataService.deleteBankMovement(del.id)
+      setNotice(`Se eliminó el movimiento.${r.filesNotRemoved ? ` No se pudieron borrar ${r.filesNotRemoved} archivo(s) del almacenamiento; el movimiento sí se eliminó.` : ''}`)
+      if (detail === del.id) setDetail(null)
+      setDel(null); reload()
+    } catch (e) { setDelError(e instanceof Error ? e.message : 'No se pudo eliminar. No se borró nada.') } finally { setDelBusy(false) }
+  }
 
   return (
     <>
@@ -47,6 +62,7 @@ export default function BankMovements() {
         <div className="card p-4"><p className="text-xs text-muted font-medium">Suma de valores</p><p className="mt-2 text-xl font-semibold tabular-nums">{report ? money(report.total_amount) : '—'}</p></div>
         <div className="card p-4"><p className="text-xs text-muted font-medium mb-1">Por tipo</p><ul className="text-sm space-y-0.5">{report?.by_type.map(t => <li key={t.key} className="flex justify-between"><span>{t.label} ({t.count})</span><span className="tabular-nums">{money(t.amount)}</span></li>)}</ul></div>
       </div>
+      {notice && <p role="status" className="mb-4 rounded-lg border border-line bg-surface2 p-3 text-sm">{notice}</p>}
       <FilterBar search={f.search ?? ''} onSearch={v => setF(p => ({ ...p, search: v }))} active={Object.entries(f).filter(([k, x]) => k !== 'search' && x).length}>
         <div className="md:w-48"><Select value={f.movement_type ?? ''} onChange={set('movement_type')}><option value="">Todos los tipos</option>{types.map(t => <option key={t}>{t}</option>)}</Select></div>
         <input type="date" className="input md:!w-40" aria-label="Desde" value={f.date_from ?? ''} onChange={set('date_from')} />
@@ -110,6 +126,18 @@ export default function BankMovements() {
                       >
                         <Pencil size={15} />
                       </button>
+                      <button
+                        title="Eliminar"
+                        aria-label="Eliminar"
+                        className="p-1 rounded hover:bg-red-500/10 hover:text-red-600"
+                        onClick={e => {
+                          e.stopPropagation()
+                          setDelError('')
+                          setDel(r)
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </span>
                   </td>
                 </tr>
@@ -118,6 +146,9 @@ export default function BankMovements() {
           </table></div>
         )}
       </div>
+      <DeleteDialog open={!!del} title="Eliminar movimiento bancario" busy={delBusy} error={delError} onCancel={() => setDel(null)} onConfirm={confirmDelete}>
+        {del && <p><b>{fdate(del.date)}</b> · {del.bank_name || 'Sin banco'} · {del.description || 'Sin descripción'} · {money(del.amount)}{del.client_name ? ` · ${del.client_name}` : ''}</p>}
+      </DeleteDialog>
       <MovementDetail id={detail} onClose={() => setDetail(null)} onEdit={m => { setDetail(null); setEditing(m) }} onChanged={reload} />
       <MovementForm
         editing={editing}

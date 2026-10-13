@@ -1,11 +1,15 @@
 import { supabase } from '../lib/supabase'
 import { SERVICE_LABEL } from '../lib/format'
-import type { ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
+import { normCode, RESERVATION_SHARED, splitFlightPassengers } from '../lib/service'
+import type { DeleteResult, DeleteSummary, PaymentCard, PaymentCardInput, Supplier, SupplierInput, ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
 import { MockDataService } from './mock'
-import { bankEnumOfLabel, bankPayload, mapBankDocument, mapBankMovement, mapCompany, mapDocument, mapGroup, mapViewRow } from './supabaseMappers'
+import { bankEnumOfLabel, bankPayload, mapBankDocument, mapBankMovement, mapCompany, mapDocument, mapGroup, mapPaymentCard, mapSupplier, mapViewRow } from './supabaseMappers'
 
 const fail = (e: { message: string }): never => { throw new Error(e.message) }
 const pick = (i: CompanyInput): CompanyInput => ({ name: i.name, nit: i.nit, contact: i.contact, email: i.email, phone: i.phone, observations: i.observations, ta: i.ta })
+const pickSupplier = (i: SupplierInput): SupplierInput => ({ name: i.name.trim(), nit: i.nit.trim(), contact: i.contact.trim(), email: i.email.trim(), phone: i.phone.trim(), is_active: i.is_active })
+const pickCard = (i: PaymentCardInput): PaymentCardInput => ({ alias: i.alias.trim(), last_four: i.last_four.trim(), bank: i.bank.trim(), holder: i.holder.trim(), is_active: i.is_active })
+const dupMsg = (e: { message: string; code?: string }, what: string) => (e.code === '23505' ? `Ya existe ${what} con esos datos.` : e.message)
 const slices = (v: any, labelOf?: (key: string) => string): Slice[] =>
   (v ?? []).map((x: any) => ({ key: x.key, label: labelOf ? labelOf(x.key) : x.label, count: Number(x.count), amount: Number(x.amount) }))
 const BUCKET = 'documents'
@@ -91,17 +95,110 @@ export class SupabaseDataService extends MockDataService {
     return (await this.getOperationById(data as string))!
   }
   async createOperation(input: OperationInput, file?: File | null) {
-    const row = await this.save(input)
-    if (!file) return row
-    try { await this.addDocument(row.id, file) } catch (e) { warnUpload(e) }
-    return (await this.getOperationById(row.id)) ?? row
+    const parts = splitFlightPassengers(input)
+    const first = await this.save(parts[0])
+    const rows = [first]
+    try {
+      for (const p of parts.slice(1)) rows.push(await this.save({ ...p, group_id: first.group_id, group_label: undefined } as OperationInput))
+    } catch (e) {
+      throw new Error(`Se guardaron ${rows.length} de ${parts.length} pasajeros. Revisa la tabla antes de reintentar. Detalle: ${e instanceof Error ? e.message : 'error desconocido'}`)
+    }
+    if (!file) return first
+    try {
+      const doc = await this.addDocument(first.id, file)
+      for (const r of rows.slice(1)) {
+        const { error } = await supabase.from('documents').insert({ operation_id: r.id, name: doc.name, mime_type: doc.mime_type || null, size: doc.size, storage_path: doc.storage_path })
+        if (error) fail(error)
+      }
+    } catch (e) { warnUpload(e) }
+    return (await this.getOperationById(first.id)) ?? first
   }
-  async updateOperation(id: string, input: OperationInput) { return this.save(input, id) }
+  async updateOperation(id: string, input: OperationInput) {
+    const before = input.type === 'flight' ? await this.getOperationById(id) : null
+    const row = await this.save(input, id)
+    if (before && row.type === 'flight') await this.syncReservation(before, row)
+    return row
+  }
+  /** Keeps reservation-level data coherent across the passengers of the same reservation (same booking code). Each passenger keeps its own data and values. */
+  private async syncReservation(before: OperationRow, after: OperationRow) {
+    const code = normCode((before.details as any).booking_code)
+    if (!code || code !== normCode((after.details as any).booking_code)) return
+    const ad: any = after.details
+    const segs = (x: any[] = []) => JSON.stringify(x.map(({ id: _i, ...r }) => r))
+    const sibs = (await this.getOperations({ type: 'flight', search: code })).filter(r => r.id !== after.id && normCode((r.details as any).booking_code) === code)
+    for (const s of sibs) {
+      const sd: any = s.details
+      const same = s.company_id === after.company_id && s.date === after.date && s.provider === after.provider
+        && RESERVATION_SHARED.every(k => sd[k] === ad[k]) && segs(sd.segments) === segs(ad.segments)
+      if (same) continue
+      const shared = Object.fromEntries(RESERVATION_SHARED.map(k => [k, ad[k]]))
+      await this.save({
+        company_id: after.company_id, type: 'flight', date: after.date, provider: after.provider, invoice_number: s.invoice_number, amount: s.amount,
+        charge_amount: s.charge_amount, observations: s.observations, group_id: s.group_id, details: { ...sd, ...shared, segments: ad.segments },
+      } as OperationInput, s.id)
+    }
+  }
 
+  /** Removes from Storage the files the database function reported as no longer used by any record. Failing here never undoes the (already committed) delete. */
+  private async removeFiles(paths: string[]): Promise<number> {
+    if (!paths.length) return 0
+    const { data, error } = await supabase.storage.from(BUCKET).remove(paths)
+    return error ? paths.length : Math.max(0, paths.length - (data?.length ?? 0))
+  }
+  async deleteOperations(ids: string[]): Promise<DeleteSummary> {
+    const { data, error } = await supabase.rpc('delete_operations', { p_ids: ids })
+    if (error) fail(error)
+    return { deleted: Number(data.deleted), filesNotRemoved: await this.removeFiles(data.storage_paths ?? []) }
+  }
+  async deleteBankMovement(id: string): Promise<DeleteSummary> {
+    const { data, error } = await supabase.rpc('delete_bank_movement', { p_id: id })
+    if (error) fail(error)
+    return { deleted: Number(data.deleted), filesNotRemoved: await this.removeFiles(data.storage_paths ?? []) }
+  }
   async getGroups(): Promise<OperationGroup[]> {
     const { data, error } = await supabase.from('operation_groups').select('*').order('code')
     if (error) fail(error)
     return (data ?? []).map(mapGroup)
+  }
+  async getSuppliers(): Promise<Supplier[]> {
+    const { data, error } = await supabase.from('suppliers').select('*').order('name')
+    if (error) fail(error)
+    return (data ?? []).map(mapSupplier)
+  }
+  async createSupplier(input: SupplierInput): Promise<Supplier> {
+    const { data, error } = await supabase.from('suppliers').insert(pickSupplier(input)).select('*').single()
+    if (error) fail({ message: dupMsg(error, 'un proveedor') })
+    return mapSupplier(data)
+  }
+  async updateSupplier(id: string, input: SupplierInput): Promise<Supplier> {
+    const { data, error } = await supabase.from('suppliers').update(pickSupplier(input)).eq('id', id).select('*').single()
+    if (error) fail({ message: dupMsg(error, 'un proveedor') })
+    return mapSupplier(data)
+  }
+  async deleteSupplier(id: string): Promise<DeleteResult> {
+    const { data, error } = await supabase.rpc('delete_supplier', { p_id: id })
+    if (error) fail(error)
+    return data as DeleteResult
+  }
+  async getCards(): Promise<PaymentCard[]> {
+    const { data, error } = await supabase.from('payment_cards').select('*').order('alias')
+    if (error) fail(error)
+    return (data ?? []).map(mapPaymentCard)
+  }
+  async createCard(input: PaymentCardInput): Promise<PaymentCard> {
+    const { data, error } = await supabase.from('payment_cards').insert(pickCard(input)).select().single()
+    if (error) fail({ message: dupMsg(error, 'una tarjeta') })
+    return mapPaymentCard(data)
+  }
+  async updateCard(id: string, input: PaymentCardInput): Promise<PaymentCard> {
+    const { data, error } = await supabase.from('payment_cards').update(pickCard(input)).eq('id', id).select().single()
+    if (error) fail({ message: dupMsg(error, 'una tarjeta') })
+    return mapPaymentCard(data)
+  }
+  async deleteCard(id: string): Promise<DeleteResult> {
+    const { data, error } = await supabase.rpc('delete_payment_card', { p_id: id })
+    if (error) fail(error)
+    return data as DeleteResult
   }
   async getProviders(): Promise<string[]> {
     const { data, error } = await supabase.from('operations_view').select('provider,airline')

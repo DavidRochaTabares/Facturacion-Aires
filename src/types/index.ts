@@ -245,3 +245,27 @@ export interface ExtractedHotel { provider?: string; amount?: number; details: H
 export interface ExtractedLoan { date?: string; provider?: string; amount?: number; invoice_number?: string; details: Partial<LoanData> }
 
 export interface AuthSession { email: string }
+
+export interface PaymentCard {
+  id: string
+  alias: string
+  last_four: string
+  bank: string
+  holder: string
+  is_active: boolean
+  created_at: string
+}
+export type PaymentCardInput = Omit<PaymentCard, 'id' | 'created_at'>
+export interface Supplier {
+  id: string
+  name: string
+  nit: string
+  contact: string
+  email: string
+  phone: string
+  is_active: boolean
+  created_at: string
+}
+export type SupplierInput = Omit<Supplier, 'id' | 'created_at'>
+export type DeleteResult = 'deleted' | 'deactivated'
+export interface DeleteSummary { deleted: number; filesNotRemoved: number }
