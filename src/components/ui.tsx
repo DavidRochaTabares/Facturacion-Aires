@@ -2,6 +2,8 @@ import { useEffect, useState, type InputHTMLAttributes, type ReactNode, type Sel
 import { ArrowLeft, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import airesDay from '../assets/aires-day.png'
 import airesNight from '../assets/aires-night.png'
+import airesDayWide from '../assets/aires-day-wide.png'
+import airesNightWide from '../assets/aires-night-wide.png'
 import spineDay from '../assets/spinedev-day.png'
 import spineNight from '../assets/spinedev-night.png'
 import { SERVICE_LABEL } from '../lib/format'
@@ -101,6 +103,13 @@ export const AgencyLogo = ({ size = 36 }: { size?: number }) => (
     <img src={airesDay} alt="Aires y Destinos" className="max-h-full max-w-full object-contain dark:hidden" />
     <img src={airesNight} alt="Aires y Destinos" className="max-h-full max-w-full object-contain hidden dark:block" />
   </span>
+)
+/** Cropped horizontal logo for tight headers; the light/dark variant follows the app theme. */
+export const MobileLogo = ({ className = 'h-9' }: { className?: string }) => (
+  <>
+    <img src={airesDayWide} alt="Aires y Destinos" className={`${className} w-auto dark:hidden`} />
+    <img src={airesNightWide} alt="Aires y Destinos" className={`${className} w-auto hidden dark:block`} />
+  </>
 )
 export const PoweredBy = () => (
   <div className="flex items-center gap-2 text-[11px] text-muted">

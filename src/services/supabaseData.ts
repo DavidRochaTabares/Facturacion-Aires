@@ -1,7 +1,8 @@
 import { supabase } from '../lib/supabase'
 import { SERVICE_LABEL } from '../lib/format'
+import { mimeFromName, normalizeDocFile, withMime } from '../lib/files'
 import { normCode, RESERVATION_SHARED, splitFlightPassengers } from '../lib/service'
-import type { DeleteResult, DeleteSummary, PaymentCard, PaymentCardInput, Supplier, SupplierInput, ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
+import type { DeleteResult, DeleteSummary, ExtractedFood, PaymentCard, PaymentCardInput, Supplier, SupplierInput, ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
 import { MockDataService } from './mock'
 import { bankEnumOfLabel, bankPayload, mapBankDocument, mapBankMovement, mapCompany, mapDocument, mapGroup, mapPaymentCard, mapSupplier, mapViewRow } from './supabaseMappers'
 
@@ -13,7 +14,7 @@ const dupMsg = (e: { message: string; code?: string }, what: string) => (e.code 
 const slices = (v: any, labelOf?: (key: string) => string): Slice[] =>
   (v ?? []).map((x: any) => ({ key: x.key, label: labelOf ? labelOf(x.key) : x.label, count: Number(x.count), amount: Number(x.amount) }))
 const BUCKET = 'documents'
-const MAX_DOC_BYTES = 10 * 1024 * 1024
+const SESSION_EXPIRED = 'Tu sesión expiró. Vuelve a iniciar sesión e inténtalo de nuevo.'
 const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
   new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('El análisis tardó demasiado. Intenta de nuevo o llena el formulario manualmente.')), ms)
@@ -263,12 +264,14 @@ export class SupabaseDataService extends MockDataService {
     return mapBankMovement(data)
   }
   private async upload(folder: 'operations' | 'bank', ownerId: string, file: File) {
+    file = await withMime(file)
     const path = `${folder}/${ownerId}/${crypto.randomUUID()}-${safeName(file.name)}`
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream' })
     if (error) fail(error)
     return path
   }
   async addBankDocument(movementId: string, file: File): Promise<BankDocument> {
+    file = await withMime(file)
     const storage_path = await this.upload('bank', movementId, file)
     const { data, error } = await supabase.from('bank_documents').insert({ bank_movement_id: movementId, name: file.name, mime_type: file.type || null, size: file.size, storage_path }).select().single()
     if (error) fail(error)
@@ -280,6 +283,7 @@ export class SupabaseDataService extends MockDataService {
     return (data ?? []).map(mapDocument)
   }
   async addDocument(operationId: string, file: File): Promise<DocumentFile> {
+    file = await withMime(file)
     const storage_path = await this.upload('operations', operationId, file)
     const { data, error } = await supabase.from('documents').insert({ operation_id: operationId, name: file.name, mime_type: file.type || null, size: file.size, storage_path }).select().single()
     if (error) fail(error)
@@ -291,7 +295,8 @@ export class SupabaseDataService extends MockDataService {
     if (signed.error) fail(signed.error)
     const res = await fetch(signed.data!.signedUrl)
     if (!res.ok) throw new Error('No se pudo descargar el archivo')
-    return URL.createObjectURL(new Blob([await res.blob()], { type: doc.mime_type || 'application/octet-stream' }))
+    const type = doc.mime_type && doc.mime_type !== 'application/octet-stream' ? doc.mime_type : mimeFromName(doc.name) || 'application/octet-stream'
+    return URL.createObjectURL(new Blob([await res.blob()], { type }))
   }
 
   async getBankReports(f: BankFilters = {}): Promise<BankReport> {
@@ -300,17 +305,20 @@ export class SupabaseDataService extends MockDataService {
     return { count: Number(data.count), total_amount: Number(data.total_amount), by_type: slices(data.by_type), last_date: data.last_date ?? '' }
   }
 
-  private async extract<T>(kind: 'flight' | 'hotel' | 'loan', file: File): Promise<T> {
-    const ok = file.type === 'application/pdf' || (kind === 'loan' && /^image\/(png|jpeg|webp)$/.test(file.type))
-    if (!ok) throw new Error(kind === 'loan' ? 'Formato no soportado. Usa PDF, PNG, JPG o WEBP.' : 'Solo se admiten archivos PDF.')
-    if (file.size > MAX_DOC_BYTES) throw new Error('El archivo supera los 10 MB.')
+  private async extract<T>(kind: 'flight' | 'hotel' | 'loan' | 'food', file: File): Promise<T> {
+    const checked = await normalizeDocFile(file, kind === 'loan' || kind === 'food' ? 'pdf-or-image' : 'pdf')
+    const { data: auth } = await supabase.auth.getSession()
+    if (!auth.session) throw new Error(SESSION_EXPIRED)
     const body = new FormData()
     body.append('kind', kind)
-    body.append('file', file)
+    body.append('file', checked)
     const { data, error } = await withTimeout(supabase.functions.invoke('extract-document', { body }), 75_000)
     if (error) {
+      const res = (error as { context?: Response }).context
+      if (error.name === 'FunctionsFetchError') throw new Error('No se pudo conectar con el servicio de análisis. Revisa tu conexión a internet e inténtalo de nuevo.')
+      if (res?.status === 401) throw new Error(SESSION_EXPIRED)
       let msg = error.message
-      try { const j = await (error as { context?: Response }).context?.json(); if (j?.error) msg = j.error } catch { /* keep generic message */ }
+      try { const j = await res?.json(); if (j?.error) msg = j.error } catch { /* keep generic message */ }
       throw new Error(msg)
     }
     if (!data || typeof data !== 'object' || 'error' in data) throw new Error((data as { error?: string } | null)?.error ?? 'Respuesta inválida del análisis.')
@@ -319,6 +327,7 @@ export class SupabaseDataService extends MockDataService {
   extractEmission(file: File): Promise<ExtractedFlight> { return this.extract('flight', file) }
   extractHotelVoucher(file: File): Promise<ExtractedHotel> { return this.extract('hotel', file) }
   extractLoanDocument(file: File): Promise<ExtractedLoan> { return this.extract('loan', file) }
+  extractFoodDocument(file: File): Promise<ExtractedFood> { return this.extract('food', file) }
 
   private async detailsOf(id: string, type: OperationType): Promise<any> {
     const r = await this.getOperationById(id)

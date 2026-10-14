@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard } from 'lucide-react'
-import { useAuth, useTheme } from '../hooks'
+import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw } from 'lucide-react'
+import { refreshAll, useAppUpdate, useAuth, useTheme } from '../hooks'
 import { CalculatorPanel } from './CalculatorPanel'
-import { AgencyLogo, Loading, PoweredBy, ThemeSwitch } from './ui'
+import { AgencyLogo, Loading, MobileLogo, PoweredBy, ThemeSwitch } from './ui'
 
 const groups = [
   { title: 'General', items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/registros', label: 'Registros', icon: ListChecks }] },
@@ -16,6 +16,17 @@ export function ProtectedLayout() {
   const { theme, toggle } = useTheme()
   const [open, setOpen] = useState(false)
   const [calcOpen, setCalcOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
+  const update = useAppUpdate()
+  const refresh = async () => {
+    if (refreshing) return
+    setRefreshing(true); setRefreshMsg('')
+    try {
+      const [ok] = await Promise.all([refreshAll(), update.check(), new Promise(r => setTimeout(r, 600))])
+      setRefreshMsg(ok ? 'Datos actualizados' : 'No se pudieron actualizar todos los datos. Revisa tu conexión.')
+    } finally { setRefreshing(false); setTimeout(() => setRefreshMsg(''), 3500) }
+  }
   const nav = useNavigate()
   if (loading) return <div className="min-h-screen grid place-items-center"><Loading /></div>
   if (!session) return <Navigate to="/login" replace />
@@ -46,14 +57,24 @@ export function ProtectedLayout() {
             <span className="flex items-center gap-3">{theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}{theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}</span>
             <ThemeSwitch dark={theme === 'dark'} onToggle={toggle} />
           </div>
+          <button type="button" onClick={refresh} disabled={refreshing} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />Actualizar datos</button>
           <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400" onClick={async () => { await signOut(); nav('/login') }}><LogOut size={18} />Cerrar sesión</button>
           <div className="mt-3 border-t border-line px-3 pt-3"><PoweredBy /></div>
         </div>
       </aside>
       <div className="flex-1 min-w-0">
         <header className="lg:hidden sticky top-0 z-20 flex items-center gap-3 h-14 px-4 bg-surface border-b border-line">
-          <button onClick={() => setOpen(true)} aria-label="Menú"><Menu size={20} /></button><span className="font-semibold">Aires y Destinos</span>
+          <button onClick={() => setOpen(true)} aria-label="Menú"><Menu size={20} /></button><MobileLogo className="h-9" />
+          <button onClick={refresh} disabled={refreshing} aria-label="Actualizar datos" title="Actualizar datos" className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /></button>
         </header>
+        <div aria-live="polite" className="sr-only">{refreshMsg}</div>
+        {refreshMsg && <p role="status" className="mx-4 mt-3 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm lg:mx-8 lg:mt-6">{refreshMsg}</p>}
+        {update.ready && (
+          <div role="status" className="mx-4 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand/40 bg-brand/10 px-3 py-2 text-sm lg:mx-8 lg:mt-6">
+            <span>Hay una nueva versión de la aplicación.</span>
+            <button className="btn-primary !py-1" onClick={update.apply}>Actualizar ahora</button>
+          </div>
+        )}
         <main className="p-4 sm:p-6 lg:p-8 w-full"><Outlet /></main>
       </div>
       <CalculatorPanel open={calcOpen} onClose={() => setCalcOpen(false)} />

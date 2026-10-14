@@ -4,6 +4,7 @@ import { useAsync } from '../hooks'
 import { GROUPABLE, isRealPassenger, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
 import { dataService } from '../services'
 import type { DetailsMap, OperationInput, OperationType, PassengerData, SegmentData } from '../types'
+import { AIRLINES } from '../constants/airlines'
 import { CardSelect, SupplierSelect } from './SupplierFields'
 import { Field, Select, Spinner, TextInput } from './ui'
 
@@ -61,7 +62,12 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
     company_id: initial?.company_id ?? '', date: initial?.date ?? today(), provider: initial?.provider ?? '', invoice_number: initial?.invoice_number ?? '',
     amount: initial?.amount ?? 0, charge_amount: initial?.charge_amount ?? 0, observations: initial?.observations ?? '',
   })
-  const [d, setD] = useState<any>(() => structuredClone({ ...emptyDetails(type), ...(initial?.details as any) }))
+  const [d, setD] = useState<any>(() => {
+    const x: any = structuredClone({ ...emptyDetails(type), ...(initial?.details as any) })
+    // Older extractions stored the flight's own arrival date in "Fecha de regreso"; a same-day value is never a real return date, so it is not shown as one.
+    if (type === 'flight') x.segments = (x.segments ?? []).map((sg: SegmentData) => (sg.arrival_date && sg.arrival_date === sg.departure_date ? { ...sg, arrival_date: '' } : sg))
+    return x
+  })
   const [groupSel, setGroupSel] = useState(initial?.group_id ?? '')
   const [groupLabel, setGroupLabel] = useState('')
   const [err, setErr] = useState<Record<string, string>>({})
@@ -150,9 +156,10 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
       const p0 = d.passengers[0]
       if (p0?.surnames?.trim()) { details.first_surname = p0.surnames; details.names = p0.names }
       else if (p0?.names?.trim() && !details.first_surname && !details.names) details.names = p0.names
-      const s0 = d.segments[0], sl = d.segments[d.segments.length - 1]
+      const s0 = d.segments[0]
       if (s0?.departure_date) details.departure_date = s0.departure_date
-      if (d.segments.length > 1 && sl?.departure_date) details.return_date = sl.departure_date
+      const back = d.segments.map((sg: SegmentData) => sg.arrival_date).filter(Boolean).sort()
+      details.return_date = back[back.length - 1] ?? ''
       if (!details.route?.trim() && d.segments.length) details.route = [d.segments[0].origin, ...d.segments.map((s: SegmentData) => s.destination)].filter(Boolean).join('-')
     } else if (type === 'hotel') {
       details.total_invoice = totalShown
@@ -297,7 +304,8 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
           <button type="button" className="btn-ghost" onClick={() => add('segments')}><Plus size={14} />Agregar tramo</button>
           <H>Reserva</H>
           <div className={grid}>
-            <TextInput label="Aerolínea *" error={err.airline} {...tv('airline')} />
+            <TextInput label="Aerolínea *" error={err.airline} list="airlines-list" autoComplete="off" placeholder="Busca o escribe una aerolínea" {...tv('airline')} />
+            <datalist id="airlines-list">{AIRLINES.map(a => <option key={a} value={a} />)}</datalist>
             <TextInput label="Código de reserva" {...tv('booking_code')} />
             <TextInput label="Código de reserva INT" {...tv('internal_booking_code')} />
             <TextInput label="Número de tiquete" {...tv('ticket_number')} />

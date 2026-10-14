@@ -1,5 +1,5 @@
 import type {
-  AuthSession, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, ExtractedFlight, ExtractedHotel, ExtractedLoan,
+  AuthSession, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, ExtractedFlight, ExtractedFood, ExtractedHotel, ExtractedLoan,
   DeleteResult, DeleteSummary, OperationFilters, OperationGroup, OperationInput, OperationInputOf, OperationRow, ServiceReport, BankDocument, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
 } from '../types'
 
@@ -68,4 +68,5 @@ export interface DataService {
   extractEmission(file: File): Promise<ExtractedFlight>
   extractHotelVoucher(file: File): Promise<ExtractedHotel>
   extractLoanDocument(file: File): Promise<ExtractedLoan>
+  extractFoodDocument(file: File): Promise<ExtractedFood>
 }

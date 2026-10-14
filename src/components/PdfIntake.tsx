@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FileUp, RotateCcw } from 'lucide-react'
+import { blockStrayFileDrops, normalizeDocFile } from '../lib/files'
 import { fsize } from '../lib/format'
 import { SECTIONS } from '../lib/sections'
 import { dataService } from '../services'
@@ -23,11 +24,14 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
   const title = `Nuevo ${LABEL[type]} desde PDF`
 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
+  useEffect(() => blockStrayFileDrops(), [])
 
-  const pick = (f?: File) => {
+  const pick = async (f?: File) => {
     if (!f) return
-    if (f.type !== 'application/pdf') return setError('Selecciona un archivo PDF')
-    setError(''); setFile(f); setUrl(URL.createObjectURL(f)); setResult(null); setStage('selected')
+    try {
+      const n = await normalizeDocFile(f, 'pdf')
+      setError(''); setFile(n); setUrl(URL.createObjectURL(n)); setResult(null); setStage('selected')
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo leer el archivo.') }
   }
   const analyze = async () => {
     if (!file) return
@@ -49,7 +53,7 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
         className="card border-dashed grid place-items-center text-center py-24 cursor-pointer hover:border-brand transition">
         <div><FileUp className="mx-auto text-brand mb-3" size={36} /><p className="font-medium">Arrastra un PDF o haz clic para seleccionarlo</p><p className="text-sm text-muted mt-1">Solo archivos .pdf</p>
           {error && <p className="text-sm text-red-500 mt-3">{error}</p>}</div>
-        <input ref={input} type="file" accept="application/pdf" className="hidden" onChange={e => pick(e.target.files?.[0])} />
+        <input ref={input} type="file" accept=".pdf,application/pdf" className="hidden" onChange={e => { pick(e.target.files?.[0]); e.target.value = '' }} />
       </div>
     </>
   )

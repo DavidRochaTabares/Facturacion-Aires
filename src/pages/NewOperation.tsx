@@ -25,16 +25,17 @@ export default function NewOperation({ section }: { section: SectionKey }) {
   const [busy, setBusy] = useState(false)
   const back = () => nav(sec.path)
 
-  if ((section === 'flight' || section === 'hotel' || section === 'loan') && !mode) return (
+  if ((section === 'flight' || section === 'hotel' || section === 'loan' || section === 'food') && !mode) return (
     <>
       <PageHeader title={sec.newLabel} subtitle="¿Cómo quieres registrarlo?" actions={<BackButton onClick={back} />} />
       <div className="grid gap-4 sm:grid-cols-2 max-w-3xl mx-auto">
-        <Choice icon={FileUp} title={section === 'hotel' ? 'Cargar PDF / voucher' : section === 'loan' ? 'Cargar comprobante' : 'Cargar PDF'} text={section === 'loan' ? 'Pega (Ctrl+V) o sube un PDF, imagen o screenshot, analízalo y corrige los datos.' : 'Sube el documento, analízalo y corrige los datos detectados.'} onClick={() => setParams({ modo: 'pdf' })} />
+        <Choice icon={FileUp} title={section === 'hotel' ? 'Cargar PDF / voucher' : section === 'loan' ? 'Cargar comprobante' : section === 'food' ? 'Cargar documento' : 'Cargar PDF'} text={section === 'loan' || section === 'food' ? 'Pega (Ctrl+V) o sube un PDF, imagen o screenshot, analízalo y corrige los datos.' : 'Sube el documento, analízalo y corrige los datos detectados.'} onClick={() => setParams({ modo: 'pdf' })} />
         <Choice icon={PenLine} title="Registrar manualmente" text="Abre directamente el formulario." onClick={() => setParams({ modo: 'manual' })} />
       </div>
     </>
   )
   if (section === 'loan') return <LoanIntake key={mode} start={mode === 'manual' ? 'manual' : 'idle'} onBack={() => setParams({})} />
+  if (mode === 'pdf' && section === 'food') return <LoanIntake key="food" kind="food" onBack={() => setParams({})} />
   if (mode === 'pdf' && (section === 'flight' || section === 'hotel')) return <PdfIntake type={section} onBack={() => setParams({})} />
 
   const type = sec.types[0]

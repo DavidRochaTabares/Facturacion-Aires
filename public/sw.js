@@ -1,6 +1,6 @@
 // Service worker: caches only static, public build assets. It never touches cross-origin requests
 // (Supabase API / Storage / Edge Functions, Google Fonts, Gemini) nor any non-GET request.
-const CACHE = 'aires-static-v1'
+const CACHE = 'aires-static-v2'
 const SHELL = '/index.html'
 const STATIC = [/^\/assets\//, /^\/icon-.*\.png$/, /^\/apple-touch-icon\.png$/, /^\/favicon\.png$/, /^\/manifest\.webmanifest$/]
 
@@ -17,6 +17,8 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return
+  // Never touch authenticated or ranged requests (documents, signed downloads, API calls)
+  if (req.headers.has('authorization') || req.headers.has('range')) return
 
   // Page navigations: network first, cached shell only when offline.
   if (req.mode === 'navigate') {

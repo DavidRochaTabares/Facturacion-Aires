@@ -4,6 +4,7 @@ import { dataService } from '../services'
 import { fdate, fsize, money, SERVICE_LABEL } from '../lib/format'
 import { summary } from '../lib/service'
 import type { DocumentFile, OperationRow } from '../types'
+import { BillingSummary } from './BillingSummary'
 import ServiceForm from './ServiceForm'
 import { Drawer, FilePreview, Loading, Modal, TypeBadge } from './ui'
 
@@ -32,7 +33,7 @@ function Specific({ r }: { r: OperationRow }) {
         <div className="space-y-2">{f.segments.map(s => (
           <div key={s.id} className="rounded-lg border border-line p-3 text-sm">
             <div className="flex justify-between font-medium"><span>{s.origin} → {s.destination}</span><span className="text-muted font-normal">{s.flight_number} · {s.cabin}</span></div>
-            <p className="text-muted mt-1">{fdate(s.departure_date)} {s.departure_time} → {fdate(s.arrival_date)} {s.arrival_time}</p>
+            <p className="text-muted mt-1">{fdate(s.departure_date)} {s.departure_time} → {s.arrival_time}{s.arrival_date ? ` · Regreso ${fdate(s.arrival_date)}` : ''}</p>
           </div>))}</div>
         <H>Pasajeros ({f.passengers.length})</H>
         <div className="space-y-2">{f.passengers.map(p => (
@@ -125,6 +126,8 @@ export default function ServiceDetail({ id, startEdit, onClose, onChanged, onNav
             <H>{SERVICE_LABEL[row.type]}</H>
             <Specific r={row} />
             {row.observations && <><H>Observaciones</H><p className="text-sm">{row.observations}</p></>}
+            <H>Resumen para facturación</H>
+            <BillingSummary row={row} />
             <H>Documentos</H>
             {row.documents.length === 0 && <p className="text-sm text-muted mb-2">Sin documentos asociados.</p>}
             {row.documents.map(doc => (

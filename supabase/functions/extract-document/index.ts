@@ -1,13 +1,13 @@
 // Supabase Edge Function: extract-document
 // POST multipart/form-data { kind: 'flight' | 'hotel' | 'loan', file: PDF | PNG | JPEG | WEBP }
 // -> JSON in the shape of ExtractedFlight / ExtractedHotel / ExtractedLoan. Nothing is stored.
-import { normalizeFlight, normalizeHotel, normalizeLoan, parseJson } from './normalize.ts'
+import { normalizeFlight, normalizeFood, normalizeHotel, normalizeLoan, parseJson, sniffMime } from './normalize.ts'
 import { PROMPTS } from './prompts.ts'
 
 const MAX_BYTES = 10 * 1024 * 1024
 const TIMEOUT_MS = 60_000
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
-const NORMALIZERS = { flight: normalizeFlight, hotel: normalizeHotel, loan: normalizeLoan } as const
+const NORMALIZERS = { flight: normalizeFlight, hotel: normalizeHotel, loan: normalizeLoan, food: normalizeFood } as const
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -39,9 +39,10 @@ Deno.serve(async (req: Request) => {
   if (!(file instanceof File)) return fail(400, 'No se recibió ningún archivo.')
   if (file.size === 0) return fail(400, 'El archivo está vacío.')
   if (file.size > MAX_BYTES) return fail(413, 'El archivo supera los 10 MB.')
-  const mime = file.type
-  const allowed = mime === 'application/pdf' || (kind === 'loan' && IMAGE_TYPES.includes(mime))
-  if (!allowed) return fail(415, kind === 'loan' ? 'Formato no soportado. Usa PDF, PNG, JPG o WEBP.' : 'Solo se admiten archivos PDF.')
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const mime = sniffMime(bytes) ?? ''
+  const allowed = mime === 'application/pdf' || ((kind === 'loan' || kind === 'food') && IMAGE_TYPES.includes(mime))
+  if (!allowed) return fail(415, (kind === 'loan' || kind === 'food' ? 'Formato no soportado. Usa PDF, PNG, JPG o WEBP.' : 'Solo se admiten archivos PDF.') + ' El archivo no parece un documento válido o está dañado.')
 
   const model = Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite'
   const t0 = Date.now()
@@ -49,7 +50,7 @@ Deno.serve(async (req: Request) => {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
   try {
-    const data = toBase64(new Uint8Array(await file.arrayBuffer()))
+    const data = toBase64(bytes)
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },

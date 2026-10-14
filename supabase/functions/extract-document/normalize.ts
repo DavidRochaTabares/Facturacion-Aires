@@ -46,7 +46,7 @@ const list = (v: unknown, max: number): any[] => (Array.isArray(v) ? v.slice(0, 
 export function normalizeFlight(raw: any) {
   const segments = list(raw?.segments, 12).map((s: any) => ({
     id: rid(), flight_number: str(s?.flight_number), origin: str(s?.origin).toUpperCase(), destination: str(s?.destination).toUpperCase(),
-    departure_date: isoDate(s?.departure_date), departure_time: hhmm(s?.departure_time), arrival_date: isoDate(s?.arrival_date), arrival_time: hhmm(s?.arrival_time), cabin: str(s?.cabin),
+    departure_date: isoDate(s?.departure_date), departure_time: hhmm(s?.departure_time), arrival_date: '', arrival_time: hhmm(s?.arrival_time), cabin: str(s?.cabin),
   }))
   if (!segments.length) segments.push({ id: rid(), flight_number: '', origin: '', destination: '', departure_date: '', departure_time: '', arrival_date: '', arrival_time: '', cabin: 'Economy' })
 
@@ -113,10 +113,34 @@ export function normalizeLoan(raw: any) {
   return out
 }
 
+export function normalizeFood(raw: any) {
+  const details: Record<string, string | number> = {}
+  const put = (k: string, v: string | number | null) => { if (v !== '' && v != null) details[k] = v }
+  put('requested_by', str(raw?.requested_by)); put('requested_item', str(raw?.requested_item))
+  put('supplies_value', cop(num(raw?.supplies_value), raw?.currency)); put('transport_value', cop(num(raw?.transport_value), raw?.currency))
+  const out: Record<string, unknown> = { details }
+  const date = isoDate(raw?.date), provider = str(raw?.provider)
+  if (date) out.date = date
+  if (provider) out.provider = provider
+  return out
+}
+
 /** The model is asked for bare JSON, but tolerate code fences or surrounding text. */
 export function parseJson(text: string): any {
   const t = text.replace(/```(?:json)?/gi, '').trim()
   const a = t.indexOf('{'), b = t.lastIndexOf('}')
   if (a < 0 || b <= a) throw new Error('empty')
   return JSON.parse(t.slice(a, b + 1))
+}
+
+/** Real file type from its bytes (the browser-declared type is unreliable on Windows/macOS). Mirrors src/lib/files.ts. */
+export function sniffMime(head: Uint8Array): string | null {
+  let text = ''
+  for (let i = 0; i < Math.min(head.length, 1024); i++) text += String.fromCharCode(head[i])
+  const at = (sig: number[], from = 0) => sig.every((v, i) => head[from + i] === v)
+  if (text.includes('%PDF-')) return 'application/pdf'
+  if (at([0x89, 0x50, 0x4e, 0x47])) return 'image/png'
+  if (at([0xff, 0xd8, 0xff])) return 'image/jpeg'
+  if (at([0x52, 0x49, 0x46, 0x46]) && at([0x57, 0x45, 0x42, 0x50], 8)) return 'image/webp'
+  return null
 }

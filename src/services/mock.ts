@@ -2,7 +2,7 @@ import { mockDb, type MockDb } from '../data/mock'
 import { SERVICE_LABEL } from '../lib/format'
 import { GROUPABLE, loanMissing } from '../lib/service'
 import type {
-  BankDocument, BankFilters, BankMovementInput, BankMovementRow, Company, CompanyInput, DocumentFile, ExtractedFlight, ExtractedHotel, ExtractedLoan,
+  BankDocument, BankFilters, BankMovementInput, BankMovementRow, Company, CompanyInput, DocumentFile, ExtractedFlight, ExtractedFood, ExtractedHotel, ExtractedLoan,
   DeleteResult, DeleteSummary, Operation, OperationFilters, OperationInput, OperationRow, Slice, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
 } from '../types'
 import type { DataService } from './types'
@@ -307,6 +307,9 @@ export class MockDataService implements DataService {
         holder: 'LAURA MENDOZA', guests: 2, room_type: 'Superior King', board: 'Desayuno', special_requests: 'Cama king, habitación tranquila', purchase_invoice: '', total_invoice: null, third_party_commission: null, provider_profit: null, ta: null, ta_without_iva: null, ta_with_iva: null, iva_ta: null, net_quote_minus_iva_ta: null,
       },
     }, 2400)
+  }
+  async extractFoodDocument(_file: File): Promise<ExtractedFood> {
+    return wait({ date: todayStr(), provider: 'Restaurante El Parador', details: { requested_by: 'Laura Mendoza', requested_item: 'Almuerzos para reunión', supplies_value: 180000, transport_value: 12000 } }, 2200)
   }
   async extractLoanDocument(_file: File): Promise<ExtractedLoan> {
     return wait({

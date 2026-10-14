@@ -242,6 +242,7 @@ export interface BankReport { count: number; total_amount: number; by_type: Slic
 
 export interface ExtractedFlight { provider?: string; amount: number; details: FlightData }
 export interface ExtractedHotel { provider?: string; amount?: number; details: HotelData }
+export interface ExtractedFood { date?: string; provider?: string; details: Partial<FoodData> }
 export interface ExtractedLoan { date?: string; provider?: string; amount?: number; invoice_number?: string; details: Partial<LoanData> }
 
 export interface AuthSession { email: string }
