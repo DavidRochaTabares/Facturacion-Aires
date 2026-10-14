@@ -63,9 +63,10 @@ export function ProtectedLayout() {
         </div>
       </aside>
       <div className="flex-1 min-w-0">
-        <header className="lg:hidden sticky top-0 z-20 flex items-center gap-3 h-14 px-4 bg-surface border-b border-line">
-          <button onClick={() => setOpen(true)} aria-label="Menú"><Menu size={20} /></button><MobileLogo className="h-9" />
-          <button onClick={refresh} disabled={refreshing} aria-label="Actualizar datos" title="Actualizar datos" className="ml-auto grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /></button>
+        <header className="lg:hidden sticky top-0 z-20 grid grid-cols-[2.25rem_1fr_2.25rem] items-center gap-3 h-14 px-4 bg-surface border-b border-line">
+          <button onClick={() => setOpen(true)} aria-label="Menú" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-surface2"><Menu size={20} /></button>
+          <span className="flex justify-center"><MobileLogo className="h-9" /></span>
+          <button onClick={refresh} disabled={refreshing} aria-label="Actualizar datos" title="Actualizar datos" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /></button>
         </header>
         <div aria-live="polite" className="sr-only">{refreshMsg}</div>
         {refreshMsg && <p role="status" className="mx-4 mt-3 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm lg:mx-8 lg:mt-6">{refreshMsg}</p>}
