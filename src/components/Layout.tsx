@@ -34,11 +34,15 @@ export function ProtectedLayout() {
   const link = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${isActive ? 'bg-brand/10 text-brand font-medium' : 'text-muted hover:bg-surface2 hover:text-fg'}`
 
+  const refreshBtn = (
+    <button onClick={refresh} disabled={refreshing} aria-label="Actualizar datos" title="Actualizar datos" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /></button>
+  )
+
   return (
     <div className="min-h-screen lg:flex">
       {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-surface border-r border-line flex flex-col transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center gap-3 px-5 h-16 border-b border-line"><AgencyLogo /><span className="font-semibold">Aires y Destinos</span></div>
+        <div className="flex items-center gap-3 px-5 h-16 border-b border-line"><AgencyLogo /><span className="ml-auto hidden lg:block">{refreshBtn}</span></div>
         <nav className="flex-1 overflow-y-auto p-3 space-y-5" onClick={() => setOpen(false)}>
           {groups.map(g => (
             <div key={g.title}>
@@ -57,7 +61,6 @@ export function ProtectedLayout() {
             <span className="flex items-center gap-3">{theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}{theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}</span>
             <ThemeSwitch dark={theme === 'dark'} onToggle={toggle} />
           </div>
-          <button type="button" onClick={refresh} disabled={refreshing} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />Actualizar datos</button>
           <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400" onClick={async () => { await signOut(); nav('/login') }}><LogOut size={18} />Cerrar sesión</button>
           <div className="mt-3 border-t border-line px-3 pt-3"><PoweredBy /></div>
         </div>
@@ -66,7 +69,7 @@ export function ProtectedLayout() {
         <header className="lg:hidden sticky top-0 z-20 grid grid-cols-[2.25rem_1fr_2.25rem] items-center gap-3 h-14 px-4 bg-surface border-b border-line">
           <button onClick={() => setOpen(true)} aria-label="Menú" className="grid h-9 w-9 place-items-center rounded-lg hover:bg-surface2"><Menu size={20} /></button>
           <span className="flex justify-center"><MobileLogo className="h-9" /></span>
-          <button onClick={refresh} disabled={refreshing} aria-label="Actualizar datos" title="Actualizar datos" className="grid h-9 w-9 place-items-center rounded-lg text-muted hover:bg-surface2 hover:text-fg disabled:opacity-70"><RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /></button>
+          {refreshBtn}
         </header>
         <div aria-live="polite" className="sr-only">{refreshMsg}</div>
         {refreshMsg && <p role="status" className="mx-4 mt-3 rounded-lg border border-line bg-surface2 px-3 py-2 text-sm lg:mx-8 lg:mt-6">{refreshMsg}</p>}
