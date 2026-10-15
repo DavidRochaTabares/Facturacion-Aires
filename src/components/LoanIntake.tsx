@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ClipboardPaste, RotateCcw } from 'lucide-react'
 import { blockStrayFileDrops, normalizeDocFile } from '../lib/files'
 import { fdate, fsize, money } from '../lib/format'
+import { loanIva } from '../lib/service'
 import { dataService } from '../services'
 import type { ExtractedFood, ExtractedLoan, OperationInput } from '../types'
 import ServiceForm, { emptyDetails } from './ServiceForm'
@@ -59,7 +60,11 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
 
   const exLoan = ex as ExtractedLoan | null
   const det = (ex?.details ?? {}) as Record<string, any>
-  const initial = ex && { company_id: '', date: ex.date, provider: ex.provider ?? '', invoice_number: exLoan?.invoice_number ?? '', amount: exLoan?.amount ?? 0, details: { ...emptyDetails(kind), ...ex.details } } as Partial<OperationInput>
+  const docIva = kind === 'loan' ? exLoan?.details.iva ?? 0 : 0
+  const docTotal = exLoan?.amount ?? 0
+  const withIva = kind === 'loan' && docIva > 0 && docTotal > docIva && Math.abs(loanIva(docTotal - docIva) - docIva) <= 1
+  const initial = ex && { company_id: '', date: ex.date, provider: ex.provider ?? '', invoice_number: exLoan?.invoice_number ?? '', amount: withIva ? docTotal - docIva : docTotal,
+    details: { ...emptyDetails(kind), ...ex.details, ...(withIva ? { has_iva: true, iva: loanIva(docTotal - docIva) } : {}) } } as Partial<OperationInput>
   const detected = ex ? ((kind === 'food' ? [
     ['Fecha', ex.date && fdate(ex.date)], ['Proveedor', ex.provider], ['Solicitó', det.requested_by], ['Qué solicitó', det.requested_item],
     ['Valor insumo', det.supplies_value ? money(det.supplies_value) : ''], ['Valor transporte', det.transport_value ? money(det.transport_value) : ''],

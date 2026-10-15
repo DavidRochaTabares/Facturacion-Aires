@@ -60,7 +60,7 @@ const TABS: { key: string; label: string; types: OperationType[]; cols: Col[] }[
   { key: 'loan', label: 'Préstamos', types: ['loan'], cols: [date(), company,
     { h: 'Solicitud', cell: on('loan', r => v(r.details.request)) }, cost(), invoice, { h: 'Fecha factura', cell: on('loan', r => d(r.details.invoice_date)) },
     { h: 'COT', mono: true, cell: on('loan', r => v(r.details.cot)) }, { h: 'Enviada', cell: on('loan', r => d(r.details.sent)) },
-    { h: 'Valor cobrado/cotizado', right: true, cell: on('loan', r => n(r.details.charged_quoted_value)) }, { h: 'IVA', right: true, cell: on('loan', r => n(r.details.iva)) },
+    { h: 'Valor cobrado/cotizado', right: true, cell: on('loan', r => n(r.details.charged_quoted_value)) }, { h: 'IVA', right: true, cell: on('loan', r => n(r.details.iva)) }, { h: 'Total con IVA', right: true, cell: on('loan', r => (r.details.has_iva ? n(r.amount + (r.details.iva ?? 0)) : '—')) },
     { h: 'OC', mono: true, cell: on('loan', r => v(r.details.oc)) }, { h: 'Recibida', cell: on('loan', r => d(r.details.received)) },
     { h: 'Solicitó', cell: on('loan', r => v(r.details.requested_by)) }, { h: 'Se pagó', cell: on('loan', r => d(r.details.paid)) }, provider, charge] },
   { key: 'other', label: 'Otros', types: ['additional', 'other'], cols: [date(), company, { h: 'Tipo', cell: r => <TypeBadge type={r.type} /> }, provider,

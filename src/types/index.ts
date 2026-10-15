@@ -92,6 +92,8 @@ export interface LoanData {
   sent: string
   charged_quoted_value: number | null
   iva: number | null
+  /** The base value (operations.amount) carries 19% IVA. Historical loans are false: they are never assumed to have IVA. */
+  has_iva: boolean
   oc: string
   received: string
   requested_by: string

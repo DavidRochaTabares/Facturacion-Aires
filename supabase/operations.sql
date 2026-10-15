@@ -30,6 +30,10 @@ alter table public.hotels add column if not exists third_party_commission numeri
 alter table public.hotels add column if not exists provider_profit numeric(14,2);
 alter table public.hotels add column if not exists net_quotation_less_ta_vat numeric(14,2);
 
+-- 0e. Préstamos: indicador de IVA 19% (el valor base sigue en operations.amount / loans.value; el IVA se deriva de él).
+-- Los préstamos existentes quedan en false: no se asume que tuvieran IVA y su columna vat (IVA histórico) no se toca.
+alter table public.loans add column if not exists has_vat boolean not null default false;
+
 -- 1. operations_view
 create or replace view public.operations_view with (security_invoker = true) as
 select
@@ -83,7 +87,7 @@ left join lateral (
       'net_quote_minus_iva_ta', hh.net_quotation_less_ta_vat)
     when 'loan' then jsonb_build_object(
       'request', ln.request, 'invoice_date', ln.invoice_date, 'cot', ln.cot, 'sent', ln.sent_at, 'charged_quoted_value', ln.quoted_value, 'iva', ln.vat,
-      'oc', ln.purchase_order, 'received', ln.received_at, 'requested_by', ln.requested_by, 'paid', ln.paid_at)
+      'oc', ln.purchase_order, 'received', ln.received_at, 'requested_by', ln.requested_by, 'paid', ln.paid_at, 'has_iva', ln.has_vat)
     when 'food' then jsonb_build_object(
       'requested_by', fs.requested_by, 'requested_item', fs.request_description, 'supplies_value', fs.supply_value, 'transport_value', fs.transport_value,
       'total_cost', coalesce(fs.total_cost, 0))
@@ -194,10 +198,11 @@ begin
 
   elsif v_type = 'loan' then
     insert into public.loans (operation_id, request, value, invoice, invoice_date, cot, sent_at, quoted_value, vat, purchase_order, received_at, requested_by, paid_at,
-      provider, charge_amount, observation)
+      provider, charge_amount, observation, has_vat)
     values (v_id, coalesce(d->>'request', ''), v_amount, v_invoice, nullif(d->>'invoice_date', '')::date, coalesce(d->>'cot', ''), nullif(d->>'sent', '')::date,
       nullif(d->>'charged_quoted_value', '')::numeric, nullif(d->>'iva', '')::numeric, coalesce(d->>'oc', ''), nullif(d->>'received', '')::date,
-      coalesce(d->>'requested_by', ''), nullif(d->>'paid', '')::date, v_provider, v_charge, v_obs);
+      coalesce(d->>'requested_by', ''), nullif(d->>'paid', '')::date, v_provider, v_charge, v_obs,
+      coalesce(nullif(d->>'has_iva', '')::boolean, false));
 
   elsif v_type = 'food' then
     insert into public.food_services (operation_id, request_date, requested_by, request_description, supply_value, transport_value, total_cost, charge_amount, provider, observations)

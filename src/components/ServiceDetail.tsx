@@ -64,7 +64,7 @@ function Specific({ r }: { r: OperationRow }) {
     case 'transport': { const d = r.details; return <Grid><KV k="Pasajero / cliente" v={d.passenger} /><KV k="Origen" v={d.origin} /><KV k="Destino" v={d.destination} /><KV k="Hora" v={d.time} /><KV k="N.º de servicio" v={d.service_number} /></Grid> }
     case 'food': { const d = r.details; return <Grid><KV k="Quién solicitó" v={d.requested_by} /><KV k="Qué solicitó" v={d.requested_item} /><KV k="Valor insumo" v={m(d.supplies_value)} /><KV k="Valor transporte" v={m(d.transport_value)} /><KV k="Costo total" v={money(d.total_cost)} /></Grid> }
     case 'loan': { const d = r.details; return <Grid><KV k="Solicitud" v={d.request} /><KV k="Solicitó" v={d.requested_by} /><KV k="Fecha de factura" v={d.invoice_date && fdate(d.invoice_date)} /><KV k="COT" v={d.cot} /><KV k="Enviada" v={d.sent && fdate(d.sent)} />
-      <KV k="Valor cobrado / cotizado" v={m(d.charged_quoted_value)} /><KV k="IVA" v={m(d.iva)} /><KV k="OC" v={d.oc} /><KV k="Recibida" v={d.received && fdate(d.received)} /><KV k="Se pagó" v={d.paid && fdate(d.paid)} /></Grid> }
+      <KV k="Valor cobrado / cotizado" v={m(d.charged_quoted_value)} /><KV k="¿Incluye IVA 19%?" v={d.has_iva ? 'Sí' : 'No'} /><KV k="IVA" v={m(d.iva)} />{d.has_iva && <KV k="Total con IVA" v={m(r.amount + (d.iva ?? 0))} />}<KV k="OC" v={d.oc} /><KV k="Recibida" v={d.received && fdate(d.received)} /><KV k="Se pagó" v={d.paid && fdate(d.paid)} /></Grid> }
     default: return <Grid><KV k="Descripción" v={r.details.description} /></Grid>
   }
 }

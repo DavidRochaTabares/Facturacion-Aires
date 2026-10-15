@@ -98,7 +98,7 @@ food('s20', 'c1', '2026-06-20', { charge_amount: 504000 }, { requested_by: 'Laur
 
 const loan = (id: string, company_id: string, date: string, o: Partial<Operation>, l: Partial<Loan>) => {
   op(id, company_id, 'loan', date, o)
-  db.loans.push({ id: `l-${id}`, operation_id: id, request: '', invoice_date: '', cot: '', sent: '', charged_quoted_value: null, iva: null, oc: '', received: '', requested_by: '', paid: '', ...l })
+  db.loans.push({ id: `l-${id}`, operation_id: id, request: '', invoice_date: '', cot: '', sent: '', charged_quoted_value: null, iva: null, has_iva: false, oc: '', received: '', requested_by: '', paid: '', ...l })
 }
 loan('s12', 'c1', '2026-05-14', { provider: 'Tecnoplaza', amount: 860000, charge_amount: 1032000, invoice_number: 'TP-33210' },
   { request: 'Maletas de viaje corporativas', invoice_date: '2026-05-14', cot: 'COT-2101', sent: 'Sí', charged_quoted_value: 1032000, iva: 196080, oc: 'OC-2026-045', received: '2026-05-20', requested_by: 'Laura Mendoza', paid: 'Sí' })

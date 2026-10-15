@@ -4,6 +4,11 @@ export const GROUPABLE: OperationType[] = ['flight', 'hotel']
 export const MARKUP: Partial<Record<OperationType, number>> = { flight: 1.3, hotel: 1.3, loan: 1.2, food: 1.2 }
 export const suggestCharge = (cost: number, type: OperationType) => Math.round((cost || 0) * (MARKUP[type] ?? 1))
 export const TA_VAT = 1.19
+export const LOAN_IVA = 0.19
+/** IVA (19%) of a loan's base value, in whole pesos. The base is never modified: IVA is always derived from it, so it cannot be applied twice. */
+export const loanIva = (base: number) => Math.round((base || 0) * LOAN_IVA)
+/** Value the 20% margin is applied to: the base value, or base + IVA when the loan includes IVA. */
+export const loanReference = (base: number, hasIva?: boolean) => (base || 0) + (hasIva ? loanIva(base) : 0)
 
 /** Loan fields required to consider the record complete. Missing ones only mark it as incomplete; saving is never blocked. */
 export function loanMissing(amount: number, invoice_number: string, d: Partial<LoanData>): string[] {
