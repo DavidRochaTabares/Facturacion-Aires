@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw } from 'lucide-react'
-import { refreshAll, useAppUpdate, useAuth, useTheme } from '../hooks'
+import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
+import { refreshAll, useAppUpdate, useAsync, useAuth, useTheme } from '../hooks'
+import { requestsService } from '../services/requests'
 import { CalculatorPanel } from './CalculatorPanel'
 import { AgencyLogo, Loading, MobileLogo, PoweredBy, ThemeSwitch } from './ui'
 
 const groups = [
-  { title: 'General', items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/registros', label: 'Registros', icon: ListChecks }] },
+  { title: 'General', items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/registros', label: 'Registros', icon: ListChecks }, { to: '/solicitudes', label: 'Solicitudes de clientes', icon: MessageSquare }] },
   { title: 'Operaciones', items: [{ to: '/vuelos', label: 'Vuelos', icon: Plane }, { to: '/hoteles', label: 'Hoteles', icon: BedDouble }, { to: '/prestamos', label: 'Préstamos', icon: HandCoins }, { to: '/alimentacion', label: 'Alimentación', icon: Utensils }, { to: '/transporte', label: 'Transporte', icon: Bus }, { to: '/otros', label: 'Servicios adicionales', icon: Sparkles }] },
   { title: 'Administrar', items: [{ to: '/empresas', label: 'Empresas', icon: Building2 }, { to: '/proveedores-tarjetas', label: 'Proveedores y tarjetas', icon: CreditCard }, { to: '/reportes', label: 'Reportes', icon: BarChart3 }, { to: '/movimientos-bancarios', label: 'Banco', icon: Landmark }] },
 ]
@@ -16,6 +17,13 @@ export function ProtectedLayout() {
   const { theme, toggle } = useTheme()
   const [open, setOpen] = useState(false)
   const [calcOpen, setCalcOpen] = useState(false)
+  // Number of conversations with unread client messages (cheap head-count query; checked every minute while the tab is visible)
+  const unread = useAsync(() => requestsService.unreadTotal().catch(() => 0), [])
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') unread.reload() }, 60_000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState('')
   const update = useAppUpdate()
@@ -47,7 +55,7 @@ export function ProtectedLayout() {
           {groups.map(g => (
             <div key={g.title}>
               <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.title}</p>
-              {g.items.map(i => <NavLink key={i.to} to={i.to} className={link}><i.icon size={18} />{i.label}</NavLink>)}
+              {g.items.map(i => <NavLink key={i.to} to={i.to} className={link}><i.icon size={18} />{i.label}{i.to === '/solicitudes' && (unread.data ?? 0) > 0 && <span aria-label={`${unread.data} sin leer`} className="ml-auto rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white dark:text-slate-900">{unread.data}</span>}</NavLink>)}
             </div>
           ))}
           <div>

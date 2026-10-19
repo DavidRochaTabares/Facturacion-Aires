@@ -50,3 +50,31 @@ input[type="date"],input[type="time"],input[type="month"],input[type="datetime-l
   .grid>*,.flex>*{min-width:0}
   .input{min-width:0;max-width:100%}
 }
+
+/* Native controls (date pickers, scrollbars, form widgets) follow the active theme */
+:root{color-scheme:light}
+.dark{color-scheme:dark}
+
+/* Public portal ambient background: five soft light fields drifting on different paths and speeds (compositor-only: transform + opacity, no blur filters, no JS) */
+.portal-bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;contain:strict}
+.portal-bg i{position:absolute;display:block;border-radius:9999px;will-change:transform,opacity;backface-visibility:hidden}
+.portal-bg i:nth-child(1){width:78vmax;height:78vmax;left:-28vmax;top:-36vmax;background:radial-gradient(circle,rgb(37 99 235/.34),rgb(37 99 235/0) 66%);animation:pb-a 26s ease-in-out infinite alternate,pb-glow 17s ease-in-out infinite alternate}
+.portal-bg i:nth-child(2){width:62vmax;height:62vmax;right:-26vmax;top:4vh;background:radial-gradient(circle,rgb(227 13 47/.20),rgb(227 13 47/0) 66%);animation:pb-b 34s ease-in-out infinite alternate,pb-glow 23s ease-in-out -7s infinite alternate}
+.portal-bg i:nth-child(3){width:70vmax;height:70vmax;left:6vw;bottom:-42vmax;background:radial-gradient(circle,rgb(79 70 229/.30),rgb(79 70 229/0) 66%);animation:pb-c 30s ease-in-out infinite alternate,pb-glow 19s ease-in-out -4s infinite alternate}
+.portal-bg i:nth-child(4){width:52vmax;height:52vmax;right:8vw;bottom:-22vmax;background:radial-gradient(circle,rgb(14 165 233/.26),rgb(14 165 233/0) 66%);animation:pb-d 41s ease-in-out infinite alternate,pb-glow 29s ease-in-out -12s infinite alternate}
+.portal-bg i:nth-child(5){width:46vmax;height:46vmax;left:30vw;top:-18vmax;background:radial-gradient(circle,rgb(30 64 175/.22),rgb(30 64 175/0) 66%);animation:pb-e 37s ease-in-out infinite alternate,pb-glow 21s ease-in-out -9s infinite alternate}
+.dark .portal-bg i:nth-child(1){background:radial-gradient(circle,rgb(96 165 250/.24),rgb(96 165 250/0) 66%)}
+.dark .portal-bg i:nth-child(2){background:radial-gradient(circle,rgb(248 113 113/.13),rgb(248 113 113/0) 66%)}
+.dark .portal-bg i:nth-child(3){background:radial-gradient(circle,rgb(129 140 248/.22),rgb(129 140 248/0) 66%)}
+.dark .portal-bg i:nth-child(4){background:radial-gradient(circle,rgb(56 189 248/.17),rgb(56 189 248/0) 66%)}
+.dark .portal-bg i:nth-child(5){background:radial-gradient(circle,rgb(59 130 246/.16),rgb(59 130 246/0) 66%)}
+@keyframes pb-a{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(24vw,16vh,0) scale(1.22)}}
+@keyframes pb-b{0%{transform:translate3d(0,0,0) scale(1.12)}100%{transform:translate3d(-26vw,22vh,0) scale(.88)}}
+@keyframes pb-c{0%{transform:translate3d(0,0,0) scale(.95)}100%{transform:translate3d(20vw,-20vh,0) scale(1.24)}}
+@keyframes pb-d{0%{transform:translate3d(0,0,0) scale(1)}100%{transform:translate3d(-22vw,-18vh,0) scale(1.18)}}
+@keyframes pb-e{0%{transform:translate3d(-8vw,0,0) scale(1.1)}100%{transform:translate3d(16vw,26vh,0) scale(.9)}}
+@keyframes pb-glow{0%{opacity:.55}100%{opacity:1}}
+.portal-fade{animation:portal-fade .45s ease-out both}
+@keyframes portal-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (max-width:640px){.portal-bg i:nth-child(4),.portal-bg i:nth-child(5){display:none}}
+@media (prefers-reduced-motion:reduce){.portal-bg i:nth-child(n),.portal-fade{animation:none}.portal-bg i{opacity:.8}}

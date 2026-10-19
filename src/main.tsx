@@ -1,4 +1,4 @@
-import { StrictMode } from 'react'
+import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './index.css'
@@ -14,6 +14,10 @@ import Reports from './pages/Reports'
 import BankMovements from './pages/BankMovements'
 import Suppliers from './pages/Suppliers'
 import SettingsPage from './pages/Settings'
+import ClientRequests from './pages/ClientRequests'
+
+// Public portal: outside AuthProvider on purpose (the visitor never touches the agency's session) and lazy-loaded.
+const PublicRequest = lazy(() => import('./pages/portal/PublicRequest'))
 
 function Home() {
   const { session, loading } = useAuth()
@@ -24,15 +28,15 @@ function Home() {
 const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById('root')!)
 if (import.meta.hot) import.meta.hot.data.root = root
 
-root.render(
-  <StrictMode>
-    <ThemeProvider><AuthProvider><BrowserRouter>
+function AppRoutes() {
+  return (
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/registros" element={<Records />} />
+          <Route path="/solicitudes" element={<ClientRequests />} />
           <Route path={SECTIONS.flight.path} element={<Records key="flight" section="flight" />} />
           <Route path={SECTIONS.flight.path + "/nuevo"} element={<NewOperation key="flight" section="flight" />} />
           <Route path={SECTIONS.hotel.path} element={<Records key="hotel" section="hotel" />} />
@@ -54,7 +58,17 @@ root.render(
         </Route>
         <Route path="*" element={<Home />} />
       </Routes>
-    </BrowserRouter></AuthProvider></ThemeProvider>
+  )
+}
+
+root.render(
+  <StrictMode>
+    <ThemeProvider><BrowserRouter>
+      <Routes>
+        <Route path="/solicitud" element={<Suspense fallback={null}><PublicRequest /></Suspense>} />
+        <Route path="/*" element={<AuthProvider><AppRoutes /></AuthProvider>} />
+      </Routes>
+    </BrowserRouter></ThemeProvider>
   </StrictMode>,
 )
 
