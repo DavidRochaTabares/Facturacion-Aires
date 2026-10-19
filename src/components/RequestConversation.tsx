@@ -52,6 +52,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
   const [link, setLink] = useState<{ token: string; name: string } | null>(null)
   const [notice, setNotice] = useState('')
   const input = useRef<HTMLInputElement>(null)
+  const area = useRef<HTMLTextAreaElement>(null)
   const bottom = useRef<HTMLDivElement>(null)
   const lastCount = useRef(0)
   const changed = useRef(onChanged)
@@ -75,6 +76,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
     document.addEventListener('visibilitychange', tick)
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', tick) }
   }, [id, load])
+  useEffect(() => { const el = area.current; if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 128)}px` } }, [text])
   useEffect(() => { const n = full?.messages.length ?? 0; if (n !== lastCount.current) { lastCount.current = n; bottom.current?.scrollIntoView({ block: 'end' }) } }, [full?.messages.length])
 
   const cleanupNote = (r: CleanupResult) => { if (r.pending > 0) setNotice(`Se eliminó de la base de datos, pero ${r.pending} archivo(s) siguen pendientes de borrarse del almacenamiento. Se reintentará automáticamente; también puedes reintentar desde la bandeja.`) }
@@ -203,14 +205,17 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
               {closed ? <p className="mt-3 flex items-center gap-2 rounded-lg bg-surface2 p-3 text-sm"><Lock size={14} />Conversación cerrada. Reábrela para volver a responder.</p> : (
                 <form onSubmit={send} className="mt-3 space-y-2">
                   <PendingFiles files={files} disabled={sending} onRemove={i => setFiles(x => x.filter((_, j) => j !== i))} />
-                  <textarea className="input min-h-20" placeholder="Escribe tu respuesta…" aria-label="Respuesta" value={text} maxLength={5000} onChange={e => setText(e.target.value)} />
                   {sendError && <p role="alert" className="text-sm text-red-500">{sendError}</p>}
-                  <div className="flex items-center justify-between gap-2">
-                    <button type="button" className="btn-ghost" disabled={sending || files.length >= 10} onClick={() => input.current?.click()}><Paperclip size={14} />Adjuntar</button>
+                  <div className="flex items-end gap-1 rounded-3xl border border-line bg-surface2 p-1 transition focus-within:border-brand">
+                    <button type="button" disabled={sending || files.length >= 10} onClick={() => input.current?.click()} aria-label="Adjuntar archivo"
+                      title="Adjuntar cotizaciones, itinerarios, confirmaciones u otros documentos: PDF, PNG, JPG o WEBP · máx. 8 MB por archivo"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-brand disabled:opacity-40"><Paperclip size={20} /></button>
                     <input ref={input} type="file" multiple className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onChange={e => { const picked = [...(e.target.files ?? [])]; setFiles(x => [...x, ...picked].slice(0, 10)); e.target.value = '' }} />
-                    <button className="btn-primary" disabled={sending || (!text.trim() && !files.length)}>{sending ? <Spinner /> : <Send size={14} />}{sending ? 'Enviando…' : 'Enviar'}</button>
+                    <textarea ref={area} rows={1} placeholder="Escribe tu respuesta…" aria-label="Respuesta" value={text} maxLength={5000} onChange={e => setText(e.target.value)}
+                      className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-5 text-fg outline-none placeholder:text-muted" />
+                    <button type="submit" disabled={sending || (!text.trim() && !files.length)} aria-label={sending ? 'Enviando…' : 'Enviar respuesta'} title="Enviar"
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white shadow-sm transition hover:opacity-90 disabled:opacity-40 dark:text-slate-900">{sending ? <Spinner /> : <Send size={18} />}</button>
                   </div>
-                  <p className="text-xs text-muted">Cotizaciones, itinerarios, confirmaciones y otros documentos: PDF, PNG, JPG o WEBP · máx. 8 MB por archivo.</p>
                 </form>
               )}
             </section>

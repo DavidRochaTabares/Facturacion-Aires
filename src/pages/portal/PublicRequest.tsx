@@ -24,24 +24,23 @@ function Shell({ children, fill = false }: { children: React.ReactNode; fill?: b
     <div className={`relative flex flex-col overflow-x-hidden bg-bg text-fg ${fill ? 'h-dvh overflow-hidden' : 'min-h-dvh'}`}>
       <div className="portal-bg" aria-hidden="true"><i /><i /><i /><i /><i /></div>
       <header className="relative z-10 shrink-0">
-        <div className={`mx-auto grid max-w-3xl grid-cols-[2.5rem_1fr_2.5rem] items-center px-4 ${fill ? 'pb-2 pt-3 sm:pt-4' : 'pb-3 pt-5 sm:pt-7'}`}>
-          <span />
-          <div className="flex flex-col items-center text-center">
-            <AgencyLogo size={60} />
-            <p className="mt-2 text-xl font-semibold leading-tight tracking-tight">Aires y Destinos</p>
-            <p className="text-xs uppercase tracking-[0.18em] text-muted">Portal de solicitudes</p>
+        <div className="mx-auto grid max-w-3xl grid-cols-[2.5rem_1fr_2.5rem] items-center gap-2 px-3 py-2 sm:px-4 sm:py-3">
+          <AgencyLogo size={36} />
+          <div className="min-w-0 text-center">
+            <p className="truncate text-base font-semibold leading-tight tracking-tight sm:text-lg">Aires y Destinos</p>
+            <p className="truncate text-[10px] uppercase tracking-[0.18em] text-muted">Portal de solicitudes</p>
           </div>
           <button type="button" onClick={toggle} aria-label={dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} title={dark ? 'Modo claro' : 'Modo oscuro'}
-            className="grid h-10 w-10 place-items-center self-start justify-self-end rounded-full border border-line bg-surface text-muted shadow-sm transition hover:text-brand">
-            {dark ? <Sun size={18} /> : <Moon size={18} />}
+            className="grid h-9 w-9 place-items-center justify-self-end rounded-full border border-line bg-surface text-muted shadow-sm transition hover:text-brand">
+            {dark ? <Sun size={16} /> : <Moon size={16} />}
           </button>
         </div>
       </header>
       <main className={`relative z-10 mx-auto w-full max-w-3xl flex-1 px-3 pt-2 sm:px-4 ${fill ? 'flex min-h-0 flex-col overflow-hidden pb-3' : 'pb-6'}`}>{children}</main>
       <footer className="relative z-10 flex shrink-0 items-center justify-center gap-2 px-4 pb-4 pt-2 text-[11px] text-muted opacity-80">
         Desarrollado por
-        <img src={spineDay} alt="SpineDev" className="h-4 w-auto dark:hidden" />
-        <img src={spineNight} alt="SpineDev" className="hidden h-4 w-auto dark:block" />
+        <img src={spineDay} alt="SpineDev" className="h-6 w-auto dark:hidden" />
+        <img src={spineNight} alt="SpineDev" className="hidden h-6 w-auto dark:block" />
       </footer>
     </div>
   )
@@ -111,10 +110,13 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
   const [sent, setSent] = useState(false)
   const [editing, setEditing] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  const area = useRef<HTMLTextAreaElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
   const nearBottom = useRef(true)
 
+  // The composer grows with the text (like WhatsApp) up to its max height, then scrolls inside.
+  useEffect(() => { const el = area.current; if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 128)}px` } }, [text])
   const trackScroll = () => {
     const el = list.current
     if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
@@ -221,15 +223,18 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
         ) : (
           <form onSubmit={send} className="mt-3 shrink-0 space-y-2 border-t border-line pt-3">
             <PendingFiles files={files} disabled={busy} onRemove={i => setFiles(x => x.filter((_, j) => j !== i))} />
-            <textarea className="input min-h-14 max-h-40 sm:min-h-20" placeholder="Escribe tu mensaje…" value={text} maxLength={5000} onChange={e => setText(e.target.value)} aria-label="Mensaje" />
             {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
-            {sent && <p role="status" className="text-sm text-emerald-600 dark:text-emerald-400">Mensaje enviado.</p>}
-            <div className="flex items-center justify-between gap-2">
-              <button type="button" className="btn-ghost" onClick={() => input.current?.click()} disabled={busy || files.length >= MAX_FILES}><Paperclip size={14} />Adjuntar</button>
+            {sent && <p role="status" className="text-xs text-emerald-600 dark:text-emerald-400">Mensaje enviado.</p>}
+            <div className="flex items-end gap-1 rounded-3xl border border-line bg-surface2 p-1 transition focus-within:border-brand">
+              <button type="button" onClick={() => input.current?.click()} disabled={busy || files.length >= MAX_FILES} aria-label="Adjuntar archivo"
+                title={`Adjuntar PDF, PNG, JPG o WEBP · máx. 8 MB por archivo y ${MAX_FILES} por mensaje`}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-brand disabled:opacity-40"><Paperclip size={20} /></button>
               <input ref={input} type="file" multiple className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onChange={e => { pick(e.target.files); e.target.value = '' }} />
-              <button className="btn-primary" disabled={busy || (!text.trim() && !files.length)}>{busy ? <Spinner /> : <Send size={14} />}{busy ? 'Enviando…' : 'Enviar'}</button>
+              <textarea ref={area} rows={1} placeholder="Escribe tu mensaje…" value={text} maxLength={5000} onChange={e => setText(e.target.value)} aria-label="Mensaje"
+                className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-5 text-fg outline-none placeholder:text-muted" />
+              <button type="submit" disabled={busy || (!text.trim() && !files.length)} aria-label={busy ? 'Enviando…' : 'Enviar mensaje'} title="Enviar"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white shadow-sm transition hover:opacity-90 disabled:opacity-40 dark:text-slate-900">{busy ? <Spinner /> : <Send size={18} />}</button>
             </div>
-            <p className="text-xs text-muted">PDF, PNG, JPG o WEBP · máx. 8 MB por archivo y {MAX_FILES} archivos por mensaje.</p>
           </form>
         )}
       </section>
