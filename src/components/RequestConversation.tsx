@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Copy, FilePlus2, KeyRound, Lock, LockOpen, Paperclip, Send, Trash2, Unlink } from 'lucide-react'
+import { Copy, KeyRound, Lock, LockOpen, Paperclip, Send, Trash2, Unlink } from 'lucide-react'
 import { copyText } from '../lib/clipboard'
-import { SECTIONS } from '../lib/sections'
 import { requestsService, type CleanupResult } from '../services/requests'
 import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment } from '../types/requests'
 import { AttachmentCard, PendingFiles, type UrlResolver } from './AttachmentPreview'
@@ -39,7 +37,6 @@ export function LinkModal({ link, onClose }: { link: { token: string; name: stri
 }
 
 export default function RequestConversation({ id, onClose, onChanged }: { id: string | null; onClose: () => void; onChanged: () => void }) {
-  const nav = useNavigate()
   const [full, setFull] = useState<ClientRequestFull | null>(null)
   const [loadError, setLoadError] = useState('')
   const [text, setText] = useState('')
@@ -156,7 +153,6 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
                   : <button className="btn-ghost" onClick={() => { setActionError(''); setAction({ kind: 'close' }) }}><Lock size={14} />Cerrar</button>}
                 <button className="btn-ghost" onClick={() => { setActionError(''); setAction({ kind: 'regenerate' }) }}><KeyRound size={14} />Regenerar enlace</button>
                 {full.link_active && <button className="btn-ghost" onClick={() => { setActionError(''); setAction({ kind: 'revoke' }) }}><Unlink size={14} />Revocar enlace</button>}
-                {full.request_type && ['flight', 'hotel'].includes(full.request_type) && full.submitted_at && <button className="btn-ghost" onClick={() => nav(`${SECTIONS[full.request_type as 'flight' | 'hotel'].path}/nuevo?modo=manual&solicitud=${full.id}`)}><FilePlus2 size={14} />Crear operación</button>}
                 <button className="btn-ghost text-red-600 dark:text-red-400" onClick={() => { setActionError(''); setAction({ kind: 'delete' }) }}><Trash2 size={14} />Eliminar</button>
               </div>
             </div>

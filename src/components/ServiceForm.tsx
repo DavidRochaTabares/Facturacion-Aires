@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { useAsync } from '../hooks'
 import { money } from '../lib/format'
-import { GROUPABLE, isRealPassenger, loanIva, loanMissing, loanReference, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
+import { GROUPABLE, isRealPassenger, loanIva, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
 import { dataService } from '../services'
 import type { DetailsMap, OperationInput, OperationType, PassengerData, SegmentData } from '../types'
 import { AIRLINES } from '../constants/airlines'
@@ -42,7 +42,7 @@ export function emptyDetails<T extends OperationType>(t: T): DetailsMap[T] {
 const today = () => new Date().toISOString().slice(0, 10)
 const netOf = (total: number | null, ta: number | null | undefined) => (total == null ? null : Math.round(total - (ta ?? 0)))
 const costOf = (type: OperationType, amount: number, d: any) =>
-  type === 'food' ? (d.supplies_value || 0) + (d.transport_value || 0) : type === 'flight' ? d.value_with_taxes_tae || 0 : type === 'loan' ? loanReference(amount, d.has_iva) : amount || 0
+  type === 'food' ? (d.supplies_value || 0) + (d.transport_value || 0) : type === 'flight' ? d.value_with_taxes_tae || 0 : amount || 0
 
 interface Props {
   type: OperationType
@@ -119,18 +119,17 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
     setNetTouched(true)
     setD((p: any) => ({ ...p, net_quote_minus_iva_ta: e.target.value === '' ? null : Number(e.target.value) }))
   }
-  // "Valor cobrado / cotizado" is the value quoted/charged by the supplier: typing it sets the same value as the base ("Valor"); IVA and the 20% margin are then derived from it
+  // "Valor cobrado / cotizado" is the value quoted/charged by the supplier: typing it sets the same value as the base ("Valor"); the 20% margin is derived from it and IVA from "Valor a cobrar"
   const onQuote = (e: { target: { value: string } }) => {
     const q = e.target.value === '' ? null : Number(e.target.value)
-    setD((p: any) => ({ ...p, charged_quoted_value: q, ...(q && q > 0 && p.has_iva ? { iva: loanIva(q) } : {}) }))
+    setD((p: any) => ({ ...p, charged_quoted_value: q }))
     if (!q || q <= 0) return
     setC(p => ({ ...p, amount: q }))
     setTouched(false)
   }
   const onIva = (e: { target: { value: string } }) => {
     const on = e.target.value === 'si'
-    setD((p: any) => ({ ...p, has_iva: on, iva: on ? loanIva(c.amount) : null }))
-    setTouched(false)
+    setD((p: any) => ({ ...p, has_iva: on, iva: on ? loanIva(charge) : null }))
   }
   const loanValue = { value: c.amount || '', onChange: (e: { target: { value: string } }) => { setC(p => ({ ...p, amount: Number(e.target.value) || 0 })); setTouched(false) } }
   const hdate = (k: 'check_in' | 'check_out') => ({
@@ -181,7 +180,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
       details.net_quote_minus_iva_ta = netShown
       details.ta_with_iva = details.ta ?? null
     } else if (type === 'loan') {
-      if (d.has_iva) details.iva = loanIva(c.amount)
+      if (d.has_iva) details.iva = loanIva(charge)
     } else if (type === 'food') { amount = cost; details.total_cost = cost }
     setSubmitError('')
     Promise.resolve(onSubmit({
@@ -196,7 +195,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
       <input className="input" type="number" min={0} value={charge || ''} onChange={e => { setTouched(true); setC(p => ({ ...p, charge_amount: Number(e.target.value) || 0 })) }} />
       {auto && (touched
         ? <button type="button" className="text-xs text-brand mt-1" onClick={() => setTouched(false)}>Usar sugerido (+{pct}%)</button>
-        : <p className="text-xs text-muted mt-1">Sugerido: {type === 'flight' ? 'Valor TKT' : type === 'hotel' ? 'Valor del hotel' : type === 'loan' ? `${d.has_iva ? 'Total con IVA' : 'Valor'} (${money(cost)})` : 'costo'} + {pct}%. Puedes modificarlo.</p>)}
+        : <p className="text-xs text-muted mt-1">Sugerido: {type === 'flight' ? 'Valor TKT' : type === 'hotel' ? 'Valor del hotel' : type === 'loan' ? `Valor (${money(cost)})` : 'costo'} + {pct}%. Puedes modificarlo.</p>)}
     </Field>
   )
   const billing = (cost: ReactNode[], charge: ReactNode[]) => (
@@ -452,9 +451,9 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
               <div role="status" className="rounded-lg border border-line bg-surface2 p-3 text-sm sm:col-span-2">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Cálculo con IVA del 19%</p>
                 <dl className="grid grid-cols-3 gap-3">
-                  <div><dt className="text-xs text-muted">Valor base</dt><dd className="tabular-nums">{money(c.amount)}</dd></div>
-                  <div><dt className="text-xs text-muted">IVA 19%</dt><dd className="tabular-nums">{money(loanIva(c.amount))}</dd></div>
-                  <div><dt className="text-xs text-muted">Total con IVA</dt><dd className="font-semibold tabular-nums">{money(loanReference(c.amount, true))}</dd></div>
+                  <div><dt className="text-xs text-muted">Valor a cobrar</dt><dd className="tabular-nums">{money(charge)}</dd></div>
+                  <div><dt className="text-xs text-muted">IVA 19%</dt><dd className="tabular-nums">{money(loanIva(charge))}</dd></div>
+                  <div><dt className="text-xs text-muted">Total con IVA</dt><dd className="font-semibold tabular-nums">{money(charge + loanIva(charge))}</dd></div>
                 </dl>
               </div>
             )}
