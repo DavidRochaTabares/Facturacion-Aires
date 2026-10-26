@@ -37,12 +37,12 @@ export function cleanDetails(type: string, raw: unknown, errors: string[]): Reco
     const dep = dateIn('departure_date', 'la fecha de salida', true)
     if (!['national', 'international'].includes(scope)) errors.push('Indica si el viaje es nacional o internacional.')
     if (!['oneway', 'roundtrip'].includes(trip)) errors.push('Indica si es solo ida o ida y vuelta.')
-    const returnRequired = scope === 'international' && trip === 'roundtrip'
-    if (returnRequired && !isDate(ret)) errors.push('Selecciona la fecha de regreso (obligatoria en viajes internacionales de ida y vuelta).')
+    const returnRequired = scope === 'international'
+    if (returnRequired && !isDate(ret)) errors.push('Selecciona la fecha de regreso (obligatoria en viajes internacionales).')
     if (ret && !isDate(ret)) errors.push('La fecha de regreso no es válida.')
     else if (ret && dep && ret < dep) errors.push('La fecha de regreso no puede ser anterior a la de salida.')
     put('origin', origin); put('destination', destination); put('departure_date', dep); put('scope', scope); put('trip_type', trip)
-    if (ret && trip !== 'oneway') put('return_date', ret) // never filled automatically: only what the client chose
+    if (ret && (scope === 'international' || trip !== 'oneway')) put('return_date', ret) // never filled automatically: only what the client chose
     put('itinerary_notes', str(d.itinerary_notes, 1000))
   } else if (type === 'hotel') {
     const destination = str(d.destination, 120)
@@ -128,6 +128,11 @@ export function validateSubmission(raw: any): { data?: CleanSubmission; errors: 
   const passengers = cleanPassengers(type, raw.passengers, 0, errors)
   if (errors.length) return { errors }
   return { errors, data: { client_name, client_email, client_phone, request_type: type, description, observations: str(raw.observations, 4000), details, passengers, privacy_accepted: true } }
+}
+
+/** A single requirement item (additional service inside the same conversation): same shape as an update, minus request-level fields. */
+export function validateItem(raw: any, existingPassengers: number): { data?: { request_type: string; description: string; observations: string; details: Record<string, string | number>; passengers: CleanPassenger[] }; errors: string[] } {
+  return validateUpdate(raw, existingPassengers)
 }
 
 /** Update of an already submitted request (open conversation only): new type/details/description and optionally NEW passengers. */

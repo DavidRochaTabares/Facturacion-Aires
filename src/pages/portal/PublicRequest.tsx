@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, Moon, Paperclip, Pencil, Send, Sun } from 'lucide-react'
+import { Lock, Moon, Paperclip, Pencil, Plus, Send, Sun } from 'lucide-react'
 import spineDay from '../../assets/spinedev-day.png'
 import spineNight from '../../assets/spinedev-night.png'
 import { AttachmentCard, forgetPreview, PendingFiles, type UrlResolver } from '../../components/AttachmentPreview'
@@ -8,8 +8,20 @@ import { AgencyLogo, Spinner } from '../../components/ui'
 import { useTheme } from '../../hooks'
 import { normalizeDocFile } from '../../lib/files'
 import { PortalError, portalApi, TOKEN_RE } from '../../services/portalApi'
-import { typeLabel, type PortalData, type RequestAttachment } from '../../types/requests'
-import { PortalForm } from './PortalForm'
+import { typeLabel, type PortalData, type PortalItem, type RequestAttachment } from '../../types/requests'
+import { PortalForm, type PortalFormInitial } from './PortalForm'
+
+/** Shared field→label mapping for request/item details so every service renders only its own facts. */
+const factsOf = (d: Record<string, string | number>): [string, string][] => ([
+  ['Origen', String(d.origin ?? '')], ['Destino', String(d.destination ?? '')], ['Salida', dmy(d.departure_date as string)], ['Regreso', dmy(d.return_date as string)],
+  ['Viaje', d.scope ? `${d.scope === 'international' ? 'Internacional' : 'Nacional'} · ${d.trip_type === 'roundtrip' ? 'ida y vuelta' : 'solo ida'}` : ''],
+  ['Entrada', dmy(d.check_in as string)], ['Salida del hotel', dmy(d.check_out as string)], ['Huéspedes', String(d.guests ?? '')], ['Habitaciones', String(d.rooms ?? '')],
+  ['Fecha del servicio', dmy(d.service_date as string)], ['Hora', String(d.time ?? '')], ['Ubicación', String(d.location ?? '')], ['Personas', String(d.people ?? '')],
+  ['Inicio', dmy(d.date_from as string)], ['Fin', dmy(d.date_to as string)], ['Fechas', String(d.dates ?? '')], ['Datos adicionales', String(d.extra ?? '')],
+  ['Preferencias', String(d.preferences ?? d.itinerary_notes ?? '')],
+] as [string, string][]).filter(([, v]) => v)
+
+const EMPTY_ITEM: PortalFormInitial = { request_type: null, description: '', observations: '', details: {} }
 
 const MAX_FILE = 8 * 1024 * 1024
 const MAX_FILES = 5
@@ -98,7 +110,7 @@ export default function PublicRequest() {
 }
 
 function Conversation({ token, data, reload }: { token: string; data: PortalData; reload: (quiet?: boolean) => Promise<void> }) {
-  const { request: r, passengers, attachments, messages } = data
+  const { request: r, passengers, attachments, items = [], messages } = data
   const closed = r.status === 'closed'
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -108,7 +120,8 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
   const [delBusy, setDelBusy] = useState(false)
   const [delError, setDelError] = useState('')
   const [sent, setSent] = useState(false)
-  const [editing, setEditing] = useState(false)
+  // Which form is open: the main request ('main'), a new requirement ('add') or editing one item (its PortalItem).
+  const [form, setForm] = useState<null | 'main' | 'add' | PortalItem>(null)
   const input = useRef<HTMLInputElement>(null)
   const area = useRef<HTMLTextAreaElement>(null)
   const list = useRef<HTMLDivElement>(null)
@@ -160,18 +173,12 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
   }
 
   const attOf = (id: string) => attachments.filter(a => a.message_id === id)
-  const d = r.details
-  const summary: [string, string][] = ([
-    ['Tipo', typeLabel(r.request_type)], ['Enviada', when(r.submitted_at ?? r.created_at)],
-    ['Origen', String(d.origin ?? '')], ['Destino', String(d.destination ?? '')], ['Salida', dmy(d.departure_date as string)], ['Regreso', dmy(d.return_date as string)],
-    ['Viaje', d.scope ? `${d.scope === 'international' ? 'Internacional' : 'Nacional'} · ${d.trip_type === 'roundtrip' ? 'ida y vuelta' : 'solo ida'}` : ''],
-    ['Entrada', dmy(d.check_in as string)], ['Salida del hotel', dmy(d.check_out as string)], ['Huéspedes', String(d.guests ?? '')], ['Habitaciones', String(d.rooms ?? '')],
-    ['Fecha del servicio', dmy(d.service_date as string)], ['Hora', String(d.time ?? '')], ['Ubicación', String(d.location ?? '')], ['Personas', String(d.people ?? '')],
-    ['Inicio', dmy(d.date_from as string)], ['Fin', dmy(d.date_to as string)], ['Fechas', String(d.dates ?? '')],
-  ] as [string, string][]).filter(([, v]) => v)
+  const summary: [string, string][] = [['Tipo', typeLabel(r.request_type)], ['Enviada', when(r.submitted_at ?? r.created_at)], ...factsOf(r.details)]
   const general = attachments.filter(a => a.kind === 'supporting')
 
-  if (editing) return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={r} existing={passengers} mode="update" onCancel={() => setEditing(false)} onDone={async () => { setEditing(false); await reload(true) }} /></div>
+  if (form === 'main') return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={r} existing={passengers} mode="update" onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
+  if (form === 'add') return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={EMPTY_ITEM} mode="add" onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
+  if (form) return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={form} existing={form.passengers} mode="edit-item" itemId={form.id} onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -179,7 +186,7 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-lg font-semibold">Tu solicitud</h1>
           <div className="flex items-center gap-2">
-            {!closed && <button type="button" className="btn-ghost !py-1 text-xs" onClick={() => setEditing(true)}><Pencil size={12} />Actualizar solicitud</button>}
+            {!closed && <button type="button" className="btn-ghost !py-1 text-xs" onClick={() => setForm('main')}><Pencil size={12} />Actualizar solicitud</button>}
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${closed ? 'bg-slate-500/10 text-muted' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'}`}>{closed ? 'Cerrada' : 'Abierta'}</span>
           </div>
         </div>
@@ -200,11 +207,39 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
         </details>
       </section>
 
+      <section className="card portal-fade max-h-[30dvh] shrink-0 overflow-y-auto p-4 sm:p-5" aria-label="Requerimientos">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Tus requerimientos</h2>
+          {!closed && <button type="button" className="btn-ghost !py-1 text-xs" onClick={() => setForm('add')}><Plus size={12} />Agregar otro</button>}
+        </div>
+        <ul className="mt-2 space-y-2">
+          {items.map(it => (
+            <li key={it.id} className="rounded-lg border border-line p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">{typeLabel(it.request_type)}</p>
+                {!closed && <button type="button" className="btn-ghost !px-2 !py-0.5 text-xs" onClick={() => setForm(it)}><Pencil size={11} />Editar</button>}
+              </div>
+              <dl className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">{factsOf(it.details).map(([k, v]) => <div key={k}><dt className="text-[11px] text-muted">{k}</dt><dd className="break-words">{v}</dd></div>)}</dl>
+              {it.description && <p className="mt-1.5 whitespace-pre-wrap text-sm">{it.description}</p>}
+              {it.observations && <p className="mt-1 whitespace-pre-wrap text-xs text-muted">{it.observations}</p>}
+              {it.passengers.length > 0 && (
+                <ul className="mt-2 space-y-1.5">{it.passengers.map(p => (
+                  <li key={p.id} className="rounded-lg border border-line p-2 text-sm">
+                    <p className="font-medium">{p.first_names} {p.last_names}</p><p className="text-xs text-muted">{p.document_type} {p.document_number} · Nac. {dmy(p.birth_date)}</p>
+                    <AttachmentList items={it.attachments.filter(a => a.passenger_id === p.id)} resolve={resolve} />
+                  </li>))}</ul>
+              )}
+              {it.attachments.some(a => a.kind === 'supporting') && <AttachmentList items={it.attachments.filter(a => a.kind === 'supporting')} resolve={resolve} />}
+            </li>))}
+          {items.length === 0 && <li className="text-sm text-muted">Si necesitas más servicios en esta misma conversación (otro vuelo, un hotel, transporte…), agrégalos con el botón de arriba.</li>}
+        </ul>
+      </section>
+
       <section className="card portal-fade flex min-h-0 flex-1 flex-col p-3 sm:p-4" aria-label="Conversación">
         <h2 className="mb-2 shrink-0 text-sm font-semibold">Conversación con la agencia</h2>
         <div ref={list} onScroll={trackScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1" aria-live="polite">
           <div ref={content} className="space-y-3">
-            {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">Tu solicitud fue enviada. La agencia te responderá aquí.</p>}
+            {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">{r.client_name.trim() ? `Hola, ${r.client_name.trim().split(' ')[0]}. ` : ''}Tu solicitud fue enviada. La agencia te responderá aquí.</p>}
             {messages.map(m => (
               <div key={m.id} className={`flex ${m.author === 'client' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.author === 'client' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>

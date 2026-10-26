@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileUp, Paperclip, PenLine } from 'lucide-react'
+import { FileUp, PenLine } from 'lucide-react'
 import LoanIntake from '../components/LoanIntake'
 import PdfIntake from '../components/PdfIntake'
 import ServiceForm from '../components/ServiceForm'
@@ -24,7 +24,6 @@ export default function NewOperation({ section }: { section: SectionKey }) {
   const [params, setParams] = useSearchParams()
   const sec = SECTIONS[section]
   const mode = params.get('modo')
-  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const back = () => nav(sec.path)
   // Opened from "Solicitudes de clientes > Crear operación": pre-fills the form for review; nothing is created automatically.
@@ -58,21 +57,12 @@ export default function NewOperation({ section }: { section: SectionKey }) {
       {prefillError && <p role="alert" className="mx-auto mb-3 max-w-4xl rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">{prefillError} Puedes registrar la operación manualmente.</p>}
       {waiting ? <div className="py-16 text-center text-muted">Cargando solicitud…</div> : <div className="card p-5 max-w-4xl mx-auto">
         <ServiceForm key={type + (prefill ? 'p' : '')} type={type} initial={prefill?.initial} busy={busy} onCancel={back}
-          onSubmit={async input => {
+          onSubmit={async (input, docs) => {
             setBusy(true)
-            const row = await dataService.createOperation(input, files[0] ?? null)
+            const row = await dataService.createOperation(input, docs)
             if (reqId && prefill) await requestsService.linkOperation(reqId, row.id).catch(() => undefined)
-            try { for (const f of files.slice(1)) await dataService.addDocument(row.id, f) }
-            catch (e) { alert(`El registro se guardó, pero no se pudo subir un archivo adicional: ${e instanceof Error ? e.message : 'error desconocido'}. Puedes adjuntarlo desde el detalle.`) }
             back()
-          }}>
-          <div>
-            <label className="label">Documentos adjuntos (opcional, puedes elegir varios)</label>
-            <label className="btn-ghost cursor-pointer"><Paperclip size={14} />{files.length ? (files.length === 1 ? files[0].name : `${files.length} archivos seleccionados`) : 'Adjuntar archivos'}
-              <input type="file" multiple accept="application/pdf,image/*" className="hidden" onChange={e => setFiles([...(e.target.files ?? [])])} /></label>
-            {files.length > 1 && <p className="mt-1 text-xs text-muted">{files.map(f => f.name).join(', ')}</p>}
-          </div>
-        </ServiceForm>
+          }} />
       </div>}
     </>
   )

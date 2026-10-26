@@ -1,9 +1,10 @@
 import { mockDb, type MockDb } from '../data/mock'
 import { SERVICE_LABEL } from '../lib/format'
-import { GROUPABLE, loanMissing } from '../lib/service'
+import { flightMissing, GROUPABLE, loanMissing } from '../lib/service'
 import type {
-  BankDocument, BankFilters, BankMovementInput, BankMovementRow, Company, CompanyInput, DocumentFile, ExtractedFlight, ExtractedFood, ExtractedHotel, ExtractedLoan,
-  DeleteResult, DeleteSummary, Operation, OperationFilters, OperationInput, OperationRow, Slice, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
+  BankDocument, BankFilters, BankMovementInput, BankMovementRow, Company, CompanyInput, DocCategory, DocumentFile, ExtractedFlight, ExtractedFood, ExtractedHotel, ExtractedLoan,
+  DeleteResult, DeleteSummary, InvoiceAlert, Operation, OperationFilters, OperationInput, OperationRow, PendingDoc, PersonalDocument, PersonalFilters, PersonalMovementInput, PersonalMovementRow,
+  Slice, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
 } from '../types'
 import type { DataService } from './types'
 
@@ -48,7 +49,7 @@ export class MockDataService implements DataService {
       company_name: this.db.companies.find(c => c.id === o.company_id)?.name ?? '—',
       documents: this.db.documents.filter(x => x.operation_id === o.id),
       group: this.db.groups.find(g => g.id === o.group_id) ?? null,
-      missing: o.type === 'loan' ? loanMissing(o.amount, o.invoice_number, details) : [],
+      missing: o.type === 'loan' ? loanMissing(o.amount, o.invoice_number, details) : o.type === 'flight' ? flightMissing(details, this.db.documents.filter(x => x.operation_id === o.id)) : [],
     } as OperationRow
   }
   private rows() { return [...this.db.operations].sort((a, b) => b.date.localeCompare(a.date)).map(o => this.compose(o)) }
@@ -96,8 +97,8 @@ export class MockDataService implements DataService {
     const { details: _d, group_label: _g, ...rest } = input
     return { ...rest, id, created_at, group_id: GROUPABLE.includes(input.type) ? this.resolveGroup(input) : null } as Operation
   }
-  private makeDoc(opId: string, file: File, folder: string): DocumentFile {
-    return { id: uid(), operation_id: opId, name: file.name, mime_type: file.type || 'application/pdf', size: file.size, storage_path: `${folder}/${opId}/${file.name}`, created_at: todayStr(), url: URL.createObjectURL(file) }
+  private makeDoc(opId: string, file: File, folder: string, category: DocCategory = 'other'): DocumentFile {
+    return { id: uid(), operation_id: opId, name: file.name, mime_type: file.type || 'application/pdf', size: file.size, storage_path: `${folder}/${opId}/${file.name}`, category, created_at: todayStr(), url: URL.createObjectURL(file) }
   }
 
   getCompanies(search?: string) {
@@ -119,11 +120,11 @@ export class MockDataService implements DataService {
 
   getOperations(filters?: OperationFilters) { return wait(this.filter(filters)) }
   getOperationById(id: string) { return wait(this.rows().find(r => r.id === id) ?? null, 150) }
-  async createOperation(input: OperationInput, file?: File | null) {
+  async createOperation(input: OperationInput, docs: PendingDoc[] = []) {
     const o = this.base(input, uid(), todayStr())
     this.db.operations.push(o)
     this.saveDetails(o, input.details)
-    if (file) this.db.documents.push(this.makeDoc(o.id, file, o.type === 'loan' ? 'prestamos' : 'emisiones'))
+    for (const { file, category } of docs) this.db.documents.push(this.makeDoc(o.id, file, o.type === 'loan' ? 'prestamos' : 'emisiones', category))
     return wait(this.compose(o), 500)
   }
   async updateOperation(id: string, input: OperationInput) {
@@ -189,9 +190,9 @@ export class MockDataService implements DataService {
   getFood(id: string) { return this.one('food', id) }
   getHotel(id: string) { return this.one('hotel', id) }
   getTransport(id: string) { return this.one('transport', id) }
-  createFlight(i: OperationInput, f?: File | null) { return this.createOperation(i, f) }
+  createFlight(i: OperationInput, docs?: PendingDoc[]) { return this.createOperation(i, docs) }
   updateFlight(id: string, i: OperationInput) { return this.updateOperation(id, i) }
-  createLoan(i: OperationInput, f?: File | null) { return this.createOperation(i, f) }
+  createLoan(i: OperationInput, docs?: PendingDoc[]) { return this.createOperation(i, docs) }
   updateLoan(id: string, i: OperationInput) { return this.updateOperation(id, i) }
   createFood(i: OperationInput) { return this.createOperation(i) }
   updateFood(id: string, i: OperationInput) { return this.updateOperation(id, i) }
@@ -201,10 +202,18 @@ export class MockDataService implements DataService {
   updateTransport(id: string, i: OperationInput) { return this.updateOperation(id, i) }
 
   getDocuments(operationId: string) { return wait(this.db.documents.filter(d => d.operation_id === operationId)) }
-  async addDocument(operationId: string, file: File) {
-    const d = this.makeDoc(operationId, file, 'documentos')
+  async addDocument(operationId: string, file: File, category: DocCategory = 'other') {
+    const d = this.makeDoc(operationId, file, 'documentos', category)
     this.db.documents.push(d)
     return wait(d, 300)
+  }
+  async updateDocumentCategory(docId: string, category: DocCategory) {
+    const d = this.db.documents.find(x => x.id === docId)
+    if (d) d.category = category
+  }
+  async deleteDocument(docId: string): Promise<DeleteSummary> {
+    this.db.documents = this.db.documents.filter(x => x.id !== docId)
+    return wait({ deleted: 1, filesNotRemoved: 0 })
   }
   async getDocumentUrl(doc: { name: string; mime_type: string; url?: string }) {
     if (doc.url) return doc.url
@@ -243,6 +252,44 @@ export class MockDataService implements DataService {
     const d: BankDocument = { id: uid(), movement_id: movementId, name: file.name, mime_type: file.type || 'application/pdf', size: file.size, storage_path: `banco/${movementId}/${file.name}`, created_at: todayStr(), url: URL.createObjectURL(file) }
     this.db.bankDocs.push(d)
     return wait(d, 200)
+  }
+  async deleteBankDocument(docId: string): Promise<DeleteSummary> {
+    this.db.bankDocs = this.db.bankDocs.filter(x => x.id !== docId)
+    return wait({ deleted: 1, filesNotRemoved: 0 })
+  }
+
+  getInvoiceAlerts(): Promise<InvoiceAlert[]> { return wait([]) }
+
+  private personal: PersonalMovementRow[] = []
+  getPersonalMovements(f: PersonalFilters = {}) {
+    const q = f.search?.trim().toLowerCase()
+    return wait(this.personal.filter(m => (!f.kind || m.kind === f.kind) && (!f.category || m.category === f.category)
+      && (!f.date_from || m.date >= f.date_from) && (!f.date_to || m.date <= f.date_to)
+      && (!q || JSON.stringify(m).toLowerCase().includes(q))).sort((a, b) => b.date.localeCompare(a.date)))
+  }
+  async createPersonalMovement(input: PersonalMovementInput, files: File[] = []) {
+    const m: PersonalMovementRow = { ...input, id: uid(), created_at: todayStr(), documents: [] }
+    for (const f of files) m.documents.push({ id: uid(), movement_id: m.id, name: f.name, mime_type: f.type || 'application/pdf', size: f.size, storage_path: `personal/${m.id}/${f.name}`, created_at: todayStr(), url: URL.createObjectURL(f) })
+    this.personal.push(m)
+    return wait(m, 300)
+  }
+  async updatePersonalMovement(id: string, input: PersonalMovementInput) {
+    const i = this.personal.findIndex(m => m.id === id)
+    if (i >= 0) this.personal[i] = { ...this.personal[i], ...input }
+    return wait(this.personal[i], 200)
+  }
+  async deletePersonalMovement(id: string): Promise<DeleteSummary> {
+    this.personal = this.personal.filter(m => m.id !== id)
+    return wait({ deleted: 1, filesNotRemoved: 0 })
+  }
+  async addPersonalDocument(movementId: string, file: File): Promise<PersonalDocument> {
+    const d: PersonalDocument = { id: uid(), movement_id: movementId, name: file.name, mime_type: file.type || 'application/pdf', size: file.size, storage_path: `personal/${movementId}/${file.name}`, created_at: todayStr(), url: URL.createObjectURL(file) }
+    this.personal.find(m => m.id === movementId)?.documents.push(d)
+    return wait(d, 200)
+  }
+  async deletePersonalDocument(docId: string): Promise<DeleteSummary> {
+    this.personal.forEach(m => { m.documents = m.documents.filter(d => d.id !== docId) })
+    return wait({ deleted: 1, filesNotRemoved: 0 })
   }
 
   async getDashboardStats() {

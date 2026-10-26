@@ -162,6 +162,9 @@ export interface DetailsMap {
   other: AdditionalData
 }
 
+export type DocCategory = 'ticket' | 'payment' | 'supplier_invoice' | 'agency_invoice' | 'other'
+export interface PendingDoc { file: File; category: DocCategory }
+
 export interface DocumentFile {
   id: string
   operation_id: string
@@ -169,6 +172,7 @@ export interface DocumentFile {
   mime_type: string
   size: number
   storage_path: string
+  category: DocCategory
   created_at: string
   url?: string
 }
@@ -272,3 +276,37 @@ export interface Supplier {
 export type SupplierInput = Omit<Supplier, 'id' | 'created_at'>
 export type DeleteResult = 'deleted' | 'deactivated'
 export interface DeleteSummary { deleted: number; filesNotRemoved: number }
+
+/** Pending collection reminder for an operation whose invoice has not been paid. One per operation. */
+export interface InvoiceAlert {
+  id: string
+  operation_id: string
+  invoice_number: string
+  amount: number
+  due_date: string
+  status: 'pending' | 'paid'
+  created_at: string
+  operation_type?: OperationType
+  operation_date?: string
+  company_name?: string
+}
+
+export type PersonalKind = 'income' | 'expense'
+export interface PersonalMovement {
+  id: string
+  date: string
+  kind: PersonalKind
+  category: string
+  description: string
+  amount: number
+  payment_method: string
+  account: string
+  beneficiary: string
+  reference: string
+  notes: string
+  created_at: string
+}
+export type PersonalMovementInput = Omit<PersonalMovement, 'id' | 'created_at'>
+export interface PersonalDocument { id: string; movement_id: string; name: string; mime_type: string; size: number; storage_path: string; created_at: string; url?: string }
+export type PersonalMovementRow = PersonalMovement & { documents: PersonalDocument[] }
+export interface PersonalFilters { search?: string; kind?: PersonalKind | ''; category?: string; date_from?: string; date_to?: string }

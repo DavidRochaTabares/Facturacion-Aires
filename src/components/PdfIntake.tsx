@@ -76,7 +76,8 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
             <>
               <p className="text-sm text-muted mb-4">Información extraída. Corrige y completa lo que falte antes de guardar.</p>
               <ServiceForm key={type + (result?.details.booking_code ?? result?.details.reservation_number)} type={type} initial={initial} busy={busy} onCancel={reset}
-                onSubmit={async v => { setBusy(true); await dataService.createOperation(v, file); nav(SECTIONS[type].path) }} />
+                initialDocs={file ? [{ file, category: 'ticket' }] : []}
+                onSubmit={async (v, docs) => { setBusy(true); await dataService.createOperation(v, docs); nav(SECTIONS[type].path) }} />
             </>
           )}
         </div>

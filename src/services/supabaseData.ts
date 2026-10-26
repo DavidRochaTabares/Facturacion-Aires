@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase'
 import { SERVICE_LABEL } from '../lib/format'
 import { mimeFromName, normalizeDocFile, withMime } from '../lib/files'
 import { normCode, RESERVATION_SHARED, splitFlightPassengers } from '../lib/service'
-import type { DeleteResult, DeleteSummary, ExtractedFood, PaymentCard, PaymentCardInput, Supplier, SupplierInput, ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, ServiceReport, Slice } from '../types'
+import type { DeleteResult, DeleteSummary, DocCategory, ExtractedFood, PaymentCard, PaymentCardInput, Supplier, SupplierInput, ExtractedFlight, ExtractedHotel, ExtractedLoan, BankDocument, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, InvoiceAlert, OperationFilters, OperationGroup, OperationInput, OperationRow, OperationType, PendingDoc, PersonalDocument, PersonalFilters, PersonalMovementInput, PersonalMovementRow, ServiceReport, Slice } from '../types'
 import { MockDataService } from './mock'
 import { bankEnumOfLabel, bankPayload, mapBankDocument, mapBankMovement, mapCompany, mapDocument, mapGroup, mapPaymentCard, mapSupplier, mapViewRow } from './supabaseMappers'
 
@@ -22,6 +22,7 @@ const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
   })
 const safeName = (n: string) => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9._-]+/g, '_').slice(-100)
 const warnUpload = (e: unknown) => alert(`El registro se guardó, pero no se pudo subir el archivo: ${e instanceof Error ? e.message : 'error desconocido'}. Puedes adjuntarlo de nuevo desde el detalle.`)
+const dayStr = (v: unknown) => String(v ?? '').slice(0, 10)
 const mergeOther = (list: Slice[]): Slice[] => {
   const m = new Map<string, Slice>()
   list.forEach(x => {
@@ -95,7 +96,7 @@ export class SupabaseDataService extends MockDataService {
     if (error) fail(error)
     return (await this.getOperationById(data as string))!
   }
-  async createOperation(input: OperationInput, file?: File | null) {
+  async createOperation(input: OperationInput, docs: PendingDoc[] = []) {
     const parts = splitFlightPassengers(input)
     const first = await this.save(parts[0])
     const rows = [first]
@@ -104,12 +105,14 @@ export class SupabaseDataService extends MockDataService {
     } catch (e) {
       throw new Error(`Se guardaron ${rows.length} de ${parts.length} pasajeros. Revisa la tabla antes de reintentar. Detalle: ${e instanceof Error ? e.message : 'error desconocido'}`)
     }
-    if (!file) return first
+    if (!docs.length) return first
     try {
-      const doc = await this.addDocument(first.id, file)
-      for (const r of rows.slice(1)) {
-        const { error } = await supabase.from('documents').insert({ operation_id: r.id, name: doc.name, mime_type: doc.mime_type || null, size: doc.size, storage_path: doc.storage_path })
-        if (error) fail(error)
+      for (const { file, category } of docs) {
+        const doc = await this.addDocument(first.id, file, category)
+        for (const r of rows.slice(1)) {
+          const { error } = await supabase.from('documents').insert({ operation_id: r.id, name: doc.name, mime_type: doc.mime_type || null, size: doc.size, storage_path: doc.storage_path, category: doc.category })
+          if (error) fail(error)
+        }
       }
     } catch (e) { warnUpload(e) }
     return (await this.getOperationById(first.id)) ?? first
@@ -263,7 +266,7 @@ export class SupabaseDataService extends MockDataService {
     if (error) fail(error)
     return mapBankMovement(data)
   }
-  private async upload(folder: 'operations' | 'bank', ownerId: string, file: File) {
+  private async upload(folder: 'operations' | 'bank' | 'personal', ownerId: string, file: File) {
     file = await withMime(file)
     const path = `${folder}/${ownerId}/${crypto.randomUUID()}-${safeName(file.name)}`
     const { error } = await supabase.storage.from(BUCKET).upload(path, file, { contentType: file.type || 'application/octet-stream' })
@@ -277,17 +280,110 @@ export class SupabaseDataService extends MockDataService {
     if (error) fail(error)
     return mapBankDocument(data)
   }
+  /** Deletes a single attachment row; the storage object is removed only when no other record references it. */
+  private async deleteAttachment(table: 'documents' | 'bank_documents' | 'personal_documents', docId: string): Promise<DeleteSummary> {
+    const { data, error } = await supabase.rpc('delete_attachment', { p_table: table, p_id: docId })
+    if (error) fail(error)
+    return { deleted: Number(data.deleted), filesNotRemoved: await this.removeFiles(data.storage_paths ?? []) }
+  }
+  async deleteBankDocument(docId: string): Promise<DeleteSummary> {
+    return this.deleteAttachment('bank_documents', docId)
+  }
+  async getInvoiceAlerts(): Promise<InvoiceAlert[]> {
+    const { data, error } = await supabase.from('invoice_alerts')
+      .select('id, operation_id, invoice_number, amount, due_date, status, created_at')
+      .eq('status', 'pending').order('due_date')
+    if (error) fail(error)
+    const alerts = data ?? []
+    const ids = [...new Set(alerts.map((a: any) => a.operation_id as string))]
+    const ops = new Map<string, { type: OperationType; date: string; company_name: string }>()
+    if (ids.length) {
+      const { data: os, error: e2 } = await supabase.from('operations_view').select('id, type, date, company_name').in('id', ids)
+      if (e2) fail(e2)
+      ;(os ?? []).forEach((o: any) => ops.set(o.id, { type: o.type, date: dayStr(o.date), company_name: o.company_name ?? '' }))
+    }
+    return alerts.map((a: any) => ({
+      id: a.id, operation_id: a.operation_id, invoice_number: a.invoice_number ?? '', amount: Number(a.amount ?? 0),
+      due_date: dayStr(a.due_date), status: a.status, created_at: dayStr(a.created_at),
+      operation_type: ops.get(a.operation_id)?.type, operation_date: ops.get(a.operation_id)?.date, company_name: ops.get(a.operation_id)?.company_name ?? '',
+    }))
+  }
+
+  private mapPersonal = (r: any): PersonalMovementRow => ({
+    id: r.id, date: dayStr(r.movement_date), kind: r.kind === 'income' ? 'income' : 'expense', category: r.category ?? '',
+    description: r.description ?? '', amount: Number(r.amount ?? 0), payment_method: r.payment_method ?? '', account: r.account ?? '',
+    beneficiary: r.beneficiary ?? '', reference: r.reference ?? '', notes: r.notes ?? '', created_at: dayStr(r.created_at),
+    documents: (r.personal_documents ?? []).map((d: any): PersonalDocument => ({
+      id: d.id, movement_id: d.personal_movement_id, name: d.name, mime_type: d.mime_type ?? '', size: Number(d.size ?? 0), storage_path: d.storage_path, created_at: dayStr(d.created_at),
+    })),
+  })
+  async getPersonalMovements(f: PersonalFilters = {}): Promise<PersonalMovementRow[]> {
+    let q = supabase.from('personal_movements').select('*, personal_documents(*)').order('movement_date', { ascending: false }).order('created_at', { ascending: false })
+    if (f.kind) q = q.eq('kind', f.kind)
+    if (f.category) q = q.eq('category', f.category)
+    if (f.date_from) q = q.gte('movement_date', f.date_from)
+    if (f.date_to) q = q.lte('movement_date', f.date_to)
+    const s = f.search?.trim().replace(/[,()%*\\]/g, ' ').trim()
+    if (s) q = q.or(['description', 'beneficiary', 'category', 'account', 'reference', 'notes'].map(c => `${c}.ilike.%${s}%`).join(','))
+    const { data, error } = await q
+    if (error) fail(error)
+    return (data ?? []).map(this.mapPersonal)
+  }
+  async createPersonalMovement(input: PersonalMovementInput, files: File[] = []): Promise<PersonalMovementRow> {
+    const { data, error } = await supabase.from('personal_movements').insert({
+      movement_date: input.date, kind: input.kind, category: input.category.trim(), description: input.description,
+      amount: input.amount, payment_method: input.payment_method, account: input.account.trim(), beneficiary: input.beneficiary.trim(),
+      reference: input.reference.trim(), notes: input.notes,
+    }).select('*, personal_documents(*)').single()
+    if (error) fail(error)
+    const row = this.mapPersonal(data)
+    for (const f of files) {
+      try { await this.addPersonalDocument(row.id, f) } catch (e) { warnUpload(e) }
+    }
+    return files.length ? (await supabase.from('personal_movements').select('*, personal_documents(*)').eq('id', row.id).single().then(r => r.error ? row : this.mapPersonal(r.data))) : row
+  }
+  async updatePersonalMovement(id: string, input: PersonalMovementInput): Promise<PersonalMovementRow> {
+    const { data, error } = await supabase.from('personal_movements').update({
+      movement_date: input.date, kind: input.kind, category: input.category.trim(), description: input.description,
+      amount: input.amount, payment_method: input.payment_method, account: input.account.trim(), beneficiary: input.beneficiary.trim(),
+      reference: input.reference.trim(), notes: input.notes,
+    }).eq('id', id).select('*, personal_documents(*)').single()
+    if (error) fail(error)
+    return this.mapPersonal(data)
+  }
+  async deletePersonalMovement(id: string): Promise<DeleteSummary> {
+    const { data, error } = await supabase.rpc('delete_personal_movement', { p_id: id })
+    if (error) fail(error)
+    return { deleted: Number(data.deleted), filesNotRemoved: await this.removeFiles(data.storage_paths ?? []) }
+  }
+  async addPersonalDocument(movementId: string, file: File): Promise<PersonalDocument> {
+    file = await withMime(file)
+    const storage_path = await this.upload('personal', movementId, file)
+    const { data, error } = await supabase.from('personal_documents').insert({ personal_movement_id: movementId, name: file.name, mime_type: file.type || null, size: file.size, storage_path }).select().single()
+    if (error) fail(error)
+    return { id: data.id, movement_id: data.personal_movement_id, name: data.name, mime_type: data.mime_type ?? '', size: Number(data.size ?? 0), storage_path: data.storage_path, created_at: dayStr(data.created_at) }
+  }
+  async deletePersonalDocument(docId: string): Promise<DeleteSummary> {
+    return this.deleteAttachment('personal_documents', docId)
+  }
   async getDocuments(operationId: string): Promise<DocumentFile[]> {
     const { data, error } = await supabase.from('documents').select('*').eq('operation_id', operationId).order('created_at')
     if (error) fail(error)
     return (data ?? []).map(mapDocument)
   }
-  async addDocument(operationId: string, file: File): Promise<DocumentFile> {
+  async addDocument(operationId: string, file: File, category: DocCategory = 'other'): Promise<DocumentFile> {
     file = await withMime(file)
     const storage_path = await this.upload('operations', operationId, file)
-    const { data, error } = await supabase.from('documents').insert({ operation_id: operationId, name: file.name, mime_type: file.type || null, size: file.size, storage_path }).select().single()
+    const { data, error } = await supabase.from('documents').insert({ operation_id: operationId, name: file.name, mime_type: file.type || null, size: file.size, storage_path, category }).select().single()
     if (error) fail(error)
     return mapDocument(data)
+  }
+  async updateDocumentCategory(docId: string, category: DocCategory): Promise<void> {
+    const { error } = await supabase.from('documents').update({ category }).eq('id', docId)
+    if (error) fail(error)
+  }
+  async deleteDocument(docId: string): Promise<DeleteSummary> {
+    return this.deleteAttachment('documents', docId)
   }
   async getDocumentUrl(doc: { name: string; mime_type: string; storage_path?: string; url?: string }): Promise<string> {
     if (!doc.storage_path) return super.getDocumentUrl(doc)

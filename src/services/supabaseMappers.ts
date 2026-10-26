@@ -1,5 +1,7 @@
-import { loanMissing } from '../lib/service'
-import type { BankDocument, BankMovementInput, BankMovementRow, Company, DocumentFile, OperationGroup, OperationRow, OperationType, PaymentCard, Supplier } from '../types'
+import { flightMissing, loanMissing } from '../lib/service'
+import type { BankDocument, BankMovementInput, BankMovementRow, Company, DocCategory, DocumentFile, OperationGroup, OperationRow, OperationType, PaymentCard, Supplier } from '../types'
+
+const DOC_CATS = new Set(['ticket', 'payment', 'supplier_invoice', 'agency_invoice', 'other'])
 
 const NULLABLE = new Set([
   'value_with_taxes_tae', 'total_invoice', 'third_party_commission', 'provider_profit', 'ta', 'ta_without_iva', 'ta_with_iva', 'iva_ta', 'net_quote_minus_iva_ta',
@@ -35,7 +37,8 @@ export const mapSupplier = (r: any): Supplier => ({
 export const mapGroup = (g: any): OperationGroup => ({ id: g.id, code: g.code, label: g.name ?? g.label, created_at: day(g.created_at) })
 
 export const mapDocument = (d: any): DocumentFile => ({
-  id: d.id, operation_id: d.operation_id, name: d.name, mime_type: d.mime_type ?? '', size: Number(d.size ?? 0), storage_path: d.storage_path, created_at: day(d.created_at),
+  id: d.id, operation_id: d.operation_id, name: d.name, mime_type: d.mime_type ?? '', size: Number(d.size ?? 0), storage_path: d.storage_path,
+  category: (DOC_CATS.has(d.category) ? d.category : 'other') as DocCategory, created_at: day(d.created_at),
 })
 
 export function mapViewRow(r: any): OperationRow {
@@ -51,7 +54,7 @@ export function mapViewRow(r: any): OperationRow {
     id: r.id, company_id: r.company_id, type, date: day(r.date), provider: r.provider ?? '', invoice_number: r.invoice_number ?? '', amount,
     charge_amount: Number(r.charge_amount ?? 0), observations: r.observations ?? '', group_id: r.group_id ?? null, created_at: day(r.created_at), details,
     company_name: r.company_name ?? '—', documents: (r.documents ?? []).map(mapDocument), group: r.group_info ? mapGroup(r.group_info) : null,
-    missing: type === 'loan' ? loanMissing(amount, r.invoice_number ?? '', details) : [],
+    missing: type === 'loan' ? loanMissing(amount, r.invoice_number ?? '', details) : type === 'flight' ? flightMissing(details, r.documents ?? []) : [],
   } as OperationRow
 }
 

@@ -2,7 +2,7 @@
 // The token travels in the x-portal-token header (never in a URL / query string). Only its SHA-256 hash is looked up in the database.
 // The service-role key lives only inside this function. The client can read/write ONLY its own conversation and can never close, reopen or delete anything.
 import { checkFile, type CheckedFile, EXT, MAX_FILES_TOTAL_BYTES } from './files.ts'
-import { validateSubmission, validateUpdate, PASSENGERS_REQUIRED } from './validate.ts'
+import { validateSubmission, validateUpdate, validateItem, PASSENGERS_REQUIRED } from './validate.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -30,6 +30,7 @@ const PORTAL_ERRORS: Record<string, [number, string]> = {
   'portal:empty': [400, 'Escribe un mensaje o adjunta un archivo.'],
   'portal:too_long': [400, 'El mensaje es demasiado largo (máximo 5.000 caracteres).'],
   'portal:too_many_files': [413, 'Se superó el número máximo de archivos permitido para esta conversación.'],
+  'portal:too_many_items': [413, 'Ya tienes el máximo de requerimientos en esta conversación. Escríbenos por el chat si necesitas más.'],
   'portal:storage_limit': [413, 'Se superó el espacio máximo de archivos de esta conversación. Contacta a la agencia.'],
   'portal:forbidden': [403, 'No tienes permiso para eliminar este archivo.'],
   'portal:not_found': [404, 'El archivo ya no existe.'],
@@ -226,6 +227,53 @@ Deno.serve(async (req: Request) => {
     })
     if (r.failed) { await removeObjects([...up.stored.values()].map(s => s.storage_path)); return r.code && PORTAL_ERRORS[r.code] ? fail409(r.code) : fail(500, 'No se pudo actualizar la solicitud. Inténtalo de nuevo.') }
     return reply(200, { ok: true, changed: !!r.data?.changed })
+  }
+
+  // Additional requirements inside the same conversation: 'add_item' creates one, 'update_item' edits it. Both reuse the request file pipeline.
+  if (action === 'add_item' || action === 'update_item') {
+    if (!form) return fail(400, 'Solicitud no válida.')
+    if (info.status === 'closed') return fail409('portal:closed')
+    if (!info.submitted) return fail409('portal:not_submitted')
+    let payload: any
+    try { payload = JSON.parse(String(form.get('payload') ?? '')) } catch { return fail(400, 'Solicitud no válida.') }
+    const itemId = action === 'update_item' ? String(json?.item_id ?? form.get('item_id') ?? '') : ''
+    if (action === 'update_item' && !/^[0-9a-f-]{36}$/i.test(itemId)) return fail(400, 'Requerimiento no válido.')
+    const current = await rpc('portal_get', { p_hash: hash })
+    if (current.failed || !current.data) return fail(500, 'No se pudo procesar la solicitud. Inténtalo de nuevo.')
+    const item = (current.data.items ?? []).find((i: any) => i.id === itemId)
+    if (action === 'update_item' && !item) return fail(404, 'El requerimiento ya no existe.')
+    const existing = (item?.passengers ?? []).length as number
+    const { data, errors } = validateItem(payload, existing)
+    const problems = [...errors]
+    const entries: { file: CheckedFile; key: string }[] = []
+    let total = 0
+    const pull = async (key: string, label: string, required: boolean) => {
+      const v = form!.get(key)
+      if (!(v instanceof File) || v.size === 0) { if (required) problems.push(`Falta ${label}.`); return }
+      const c = await checkFile(v, label)
+      if ('error' in c) { problems.push(c.error); return }
+      total += c.size; entries.push({ file: c, key })
+    }
+    const fresh = Array.isArray(payload?.passengers) ? Math.min(payload.passengers.length, 10) : 0
+    const needId = PASSENGERS_REQUIRED.includes(String(payload?.request_type))
+    for (let i = 0; i < fresh; i++) {
+      const p = payload.passengers[i]
+      const name = [p?.first_names, p?.last_names].filter((x: unknown) => typeof x === 'string' && x.trim()).join(' ').trim()
+      await pull(`file_p${i}`, `el documento de identidad del pasajero ${existing + i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, needId)
+    }
+    for (let j = 0; j < MAX_EXTRA_FILES; j++) await pull(`file_x${j}`, `el archivo complementario ${j + 1}`, false)
+    if (total > MAX_FILES_TOTAL_BYTES) problems.push('Los archivos superan el tamaño total permitido (40 MB).')
+    if (problems.length || !data) return fail(422, problems[0] ?? 'Revisa los datos del requerimiento.', { errors: problems })
+
+    const up = await uploadAll(info.id, entries)
+    if ('error' in up) return up.error
+    const rec = (k: string) => up.stored.get(k) ?? null
+    const pData = { ...data, passengers: data.passengers.map((p, i) => ({ ...p, file: rec(`file_p${i}`) })), extras: [...up.stored.entries()].filter(([k]) => k.startsWith('file_x')).map(([, s]) => s) }
+    const r = action === 'add_item'
+      ? await rpc('portal_add_item', { p_hash: hash, p_data: pData })
+      : await rpc('portal_update_item', { p_hash: hash, p_item: itemId, p_data: pData })
+    if (r.failed) { await removeObjects([...up.stored.values()].map(s => s.storage_path)); return r.code && PORTAL_ERRORS[r.code] ? fail409(r.code) : fail(500, 'No se pudo guardar el requerimiento. Inténtalo de nuevo.') }
+    return reply(200, { ok: true, id: r.data?.id })
   }
 
   if (action === 'delete_attachment') {

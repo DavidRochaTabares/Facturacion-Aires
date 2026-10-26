@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Eye, FilterX, FileText, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Eye, FilterX, FileText, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
 import { DeleteDialog } from '../components/DeleteDialog'
 import { Drawer, Empty, FilePreview, FilterBar, Loading, Modal, PageHeader, Select, Spinner, TextInput } from '../components/ui'
 import { useAsync, useDebounced } from '../hooks'
-import { fdate, fsize, money } from '../lib/format'
+import { fdate, fsize, money, SERVICE_LABEL } from '../lib/format'
 import { dataService } from '../services'
-import type { BankDocument, BankFilters, BankMovementInput, BankMovementRow } from '../types'
+import type { BankDocument, BankFilters, BankMovementInput, BankMovementRow, PersonalMovementRow } from '../types'
+import PersonalMovements from './PersonalMovements'
 
 const TYPES = ['Ingreso', 'Egreso', 'Transferencia', 'Comisión bancaria', 'Otro']
 
@@ -26,13 +27,18 @@ const blank = (): BankMovementInput => ({
   observation: '',
 })
 
+const todayStr = () => new Date().toISOString().slice(0, 10)
+
 export default function BankMovements() {
+  const [tab, setTab] = useState<'agency' | 'personal'>('agency')
+  const [personalEditing, setPersonalEditing] = useState<PersonalMovementRow | 'new' | null>(null)
   const [f, setF] = useState<BankFilters>({})
   const q = useDebounced(f.search)
   const filters = { ...f, search: q }
   const { data: rows, loading, reload } = useAsync(() => dataService.getBankMovements(filters), [JSON.stringify(filters)])
   const { data: report } = useAsync(() => dataService.getBankReports(filters), [JSON.stringify(filters)])
   const { data: all } = useAsync(() => dataService.getBankReports(), [rows?.length])
+  const { data: alerts, reload: reloadAlerts } = useAsync(() => dataService.getInvoiceAlerts(), [rows?.length])
   const types = [...new Set([...TYPES, ...(all?.by_type.map(t => t.key) ?? [])])]
   const set = (k: keyof BankFilters) => (e: { target: { value: string } }) => setF(p => ({ ...p, [k]: e.target.value }))
 
@@ -56,7 +62,28 @@ export default function BankMovements() {
   return (
     <>
       <PageHeader title="Movimientos bancarios" subtitle="Control de la cuenta bancaria de la agencia (independiente de los registros de servicios)"
-        actions={<button className="btn-primary" onClick={() => setEditing('new')}><Plus size={16} />Nuevo movimiento</button>} />
+        actions={<button className="btn-primary" onClick={() => (tab === 'agency' ? setEditing('new') : setPersonalEditing('new'))}><Plus size={16} />Nuevo movimiento</button>} />
+      <div className="mb-4 flex gap-1 rounded-lg border border-line bg-surface2/60 p-1 w-fit">
+        {([['agency', 'Agencia'], ['personal', 'Gastos personales']] as const).map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setTab(k)}
+            className={`rounded-md px-4 py-1.5 text-sm transition ${tab === k ? 'bg-surface font-medium shadow-sm' : 'text-muted hover:text-fg'}`}>{l}</button>
+        ))}
+      </div>
+      {tab === 'personal' ? <PersonalMovements editing={personalEditing} setEditing={setPersonalEditing} /> : (<>
+      {(alerts ?? []).length > 0 && (
+        <div className="card p-4 mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2 flex items-center gap-2"><AlertTriangle size={14} className="text-amber-500" />Facturas por cobrar</p>
+          <ul className="space-y-1.5 text-sm">
+            {(alerts ?? []).map(a => (
+              <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                <span className="font-medium">{a.invoice_number ? `Factura ${a.invoice_number}` : `${SERVICE_LABEL[a.operation_type ?? 'other']} sin número de factura`}</span>
+                <span className="text-muted">{a.company_name || '—'} · {money(a.amount)}</span>
+                <span className={a.due_date <= todayStr() ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted'}>Cobrar el {fdate(a.due_date)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-3 mb-4">
         <div className="card p-4"><p className="text-xs text-muted font-medium">Movimientos</p><p className="mt-2 text-xl font-semibold">{report?.count ?? '—'}</p></div>
         <div className="card p-4"><p className="text-xs text-muted font-medium">Suma de valores</p><p className="mt-2 text-xl font-semibold tabular-nums">{report ? money(report.total_amount) : '—'}</p></div>
@@ -149,15 +176,17 @@ export default function BankMovements() {
       <DeleteDialog open={!!del} title="Eliminar movimiento bancario" busy={delBusy} error={delError} onCancel={() => setDel(null)} onConfirm={confirmDelete}>
         {del && <p><b>{fdate(del.date)}</b> · {del.bank_name || 'Sin banco'} · {del.description || 'Sin descripción'} · {money(del.amount)}{del.client_name ? ` · ${del.client_name}` : ''}</p>}
       </DeleteDialog>
-      <MovementDetail id={detail} onClose={() => setDetail(null)} onEdit={m => { setDetail(null); setEditing(m) }} onChanged={reload} />
+      <MovementDetail id={detail} onClose={() => setDetail(null)} onEdit={m => { setDetail(null); setEditing(m) }} onChanged={() => { reload(); reloadAlerts() }} />
       <MovementForm
         editing={editing}
         onClose={() => setEditing(null)}
         onSaved={() => {
           setEditing(null)
           reload()
+          reloadAlerts()
         }}
       />
+      </>)}
     </>
   )
 }
@@ -347,6 +376,15 @@ function MovementForm({
 function MovementDetail({ id, onClose, onEdit, onChanged }: { id: string | null; onClose: () => void; onEdit: (m: BankMovementRow) => void; onChanged: () => void }) {
   const [row, setRow] = useState<BankMovementRow | null>(null)
   const [preview, setPreview] = useState<{ doc: BankDocument; url: string } | null>(null)
+  const [delDoc, setDelDoc] = useState<BankDocument | null>(null)
+  const [delDocBusy, setDelDocBusy] = useState(false)
+  const [delDocError, setDelDocError] = useState('')
+  const confirmDelDoc = async () => {
+    if (!delDoc || !row) return
+    setDelDocBusy(true); setDelDocError('')
+    try { await dataService.deleteBankDocument(delDoc.id); setDelDoc(null); onChanged(); load(row.id) }
+    catch (e) { setDelDocError(e instanceof Error ? e.message : 'No se pudo eliminar el archivo.') } finally { setDelDocBusy(false) }
+  }
   const load = (i: string) => dataService.getBankMovementById(i).then(setRow)
   useEffect(() => { setRow(null); if (id) load(id) }, [id])
   const KV = ({ k, v }: { k: string; v?: string }) => v ? <div><dt className="text-xs text-muted">{k}</dt><dd className="text-sm mt-0.5 break-words">{v}</dd></div> : null
@@ -367,7 +405,8 @@ function MovementDetail({ id, onClose, onEdit, onChanged }: { id: string | null;
             {row.documents.map(d => (
               <div key={d.id} className="flex items-center gap-3 rounded-lg border border-line p-3 mb-2"><FileText size={18} className="text-brand" />
                 <div className="flex-1 min-w-0"><p className="text-sm truncate">{d.name}</p><p className="text-xs text-muted">{fsize(d.size)} · {fdate(d.created_at)}</p></div>
-                <button className="btn-ghost" onClick={async () => { try { setPreview({ doc: d, url: await dataService.getDocumentUrl(d) }) } catch (err) { alert(err instanceof Error ? err.message : 'No se pudo abrir el comprobante') } }}><Eye size={14} />Ver</button></div>
+                <button className="btn-ghost" onClick={async () => { try { setPreview({ doc: d, url: await dataService.getDocumentUrl(d) }) } catch (err) { alert(err instanceof Error ? err.message : 'No se pudo abrir el comprobante') } }}><Eye size={14} />Ver</button>
+                <button title="Eliminar archivo" aria-label="Eliminar archivo" className="p-1.5 rounded text-muted hover:bg-red-500/10 hover:text-red-600" onClick={() => { setDelDocError(''); setDelDoc(d) }}><Trash2 size={15} /></button></div>
             ))}
             <label className="btn-ghost cursor-pointer"><Paperclip size={14} />Adjuntar comprobante
               <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async e => { const f = e.target.files?.[0]; if (f) { try { await dataService.addBankDocument(row.id, f); onChanged(); load(row.id) } catch (err) { alert(err instanceof Error ? err.message : 'No se pudo subir el comprobante') } } e.target.value = '' }} /></label>
@@ -375,6 +414,10 @@ function MovementDetail({ id, onClose, onEdit, onChanged }: { id: string | null;
         )}
       </Drawer>
       <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.doc.name ?? ''}><div className="h-[60vh]"><FilePreview url={preview?.url ?? null} mime={preview?.doc.mime_type} className="h-full" /></div></Modal>
+      <DeleteDialog open={!!delDoc} title="Eliminar comprobante" busy={delDocBusy} error={delDocError} onCancel={() => setDelDoc(null)} onConfirm={confirmDelDoc}>
+        {delDoc && <p><b>{delDoc.name}</b> · {fsize(delDoc.size)}</p>}
+        <p className="mt-2 text-muted">Solo se elimina este archivo. El movimiento y sus demás comprobantes no se modifican.</p>
+      </DeleteDialog>
     </>
   )
 }

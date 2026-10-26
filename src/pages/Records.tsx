@@ -84,6 +84,8 @@ export default function Records({ section }: { section?: SectionKey }) {
   const filters = { ...f, search: q, type: (types.length === 1 ? types[0] : f.type) as OperationType | '' | undefined }
 
   const { data: rows, loading, reload } = useAsync(() => dataService.getOperations(filters), [JSON.stringify(filters)])
+  const { data: alerts } = useAsync(() => dataService.getInvoiceAlerts(), [rows?.length])
+  const alertByOp = useMemo(() => new Map((alerts ?? []).map(a => [a.operation_id, a])), [alerts])
   const { data: companies } = useAsync(() => dataService.getCompanies(), [])
   const { data: providers } = useAsync(() => dataService.getProviders(), [])
   const shown = useMemo(() => (rows ?? []).filter(r => types.length < 2 || types.includes(r.type)), [rows, types])
@@ -128,6 +130,7 @@ export default function Records({ section }: { section?: SectionKey }) {
         <td key={c.h} style={c.sticky ? { left: c.sticky } : undefined} className={`td !px-2 !py-1.5 ${flight ? '!whitespace-nowrap' : '!whitespace-normal'} ${c.sticky ? 'sticky z-10 bg-surface' : ''} ${c.h === 'Observación' ? 'max-w-[16rem] truncate' : ''} ${c.right ? 'text-right tabular-nums' : ''} ${c.mono ? 'font-mono text-xs' : ''}`}>
           {i === 0 && prefix && <span className="text-muted">{prefix}</span>}{c.cell(r)}
           {i === 0 && r.missing.length > 0 && <span title={`Faltan: ${r.missing.join(', ')}`} className="mt-1 flex w-fit items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300"><AlertTriangle size={11} />Incompleto</span>}
+          {i === 0 && alertByOp.has(r.id) && <span title={`Factura pendiente de cobro · vence ${fdate(alertByOp.get(r.id)!.due_date)}`} className="mt-1 flex w-fit items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] text-red-600 dark:text-red-400"><AlertTriangle size={11} />Por cobrar · {fdate(alertByOp.get(r.id)!.due_date)}</span>}
         </td>
       ))}
       <td className="td !px-2 !py-1.5 text-muted">{r.documents.length > 0 && <Paperclip size={14} aria-label="Con documentos" />}</td>
@@ -167,7 +170,7 @@ export default function Records({ section }: { section?: SectionKey }) {
         <div className="md:w-24"><Select value={f.year ?? ''} onChange={set('year')}><option value="">Año</option>{['2025', '2026'].map(y => <option key={y}>{y}</option>)}</Select></div>
         <div className="md:w-36 col-span-2 md:col-span-1"><Select value={f.month ?? ''} onChange={set('month')}><option value="">Mes</option>{MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}</Select></div>
         <div className="col-span-2 grid grid-cols-2 gap-2 md:contents">
-          {(!section || section === 'loan') && (
+          {(!section || section === 'loan' || section === 'flight') && (
             <button type="button" onClick={() => setF(p => ({ ...p, incomplete: !p.incomplete }))} className={`btn border ${f.incomplete ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300' : 'bg-surface border-line text-muted hover:text-fg'}`}><AlertTriangle size={14} />Incompletos</button>
           )}
           <button type="button" className="btn-ghost" onClick={() => { setF({}); setParams({}) }}><FilterX size={14} />Limpiar filtros</button>

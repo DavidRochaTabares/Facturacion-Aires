@@ -10,9 +10,9 @@ export const DOC_TYPES: DocType[] = ['CC', 'CE', 'TI', 'RC', 'PA', 'NIT']
 /** Travel requests need each passenger's data and identity document (same rule enforced by the Edge Function). */
 export const PASSENGERS_REQUIRED: RequestType[] = ['flight', 'hotel', 'package']
 
-export interface RequestPassenger { id: string; first_names: string; last_names: string; document_type: DocType; document_number: string; birth_date: string }
+export interface RequestPassenger { id: string; first_names: string; last_names: string; document_type: DocType; document_number: string; birth_date: string; item_id?: string | null }
 export interface RequestAttachment {
-  id: string; kind: 'identity' | 'supporting' | 'message'; passenger_id: string | null; message_id: string | null
+  id: string; kind: 'identity' | 'supporting' | 'message'; passenger_id: string | null; message_id: string | null; item_id?: string | null
   file_name: string; mime_type: string; size_bytes: number; uploaded_by: 'client' | 'agency'; created_at: string; storage_path?: string
 }
 export interface RequestMessage { id: string; author: 'client' | 'agency'; body: string; created_at: string }
@@ -22,10 +22,21 @@ export interface ClientRequestRow {
   id: string; created_at: string; client_name: string; client_email: string; client_phone: string; request_type: RequestType | null; description: string
   status: RequestStatus; submitted_at: string | null; last_activity_at: string; last_message_author: 'client' | 'agency' | null; agency_unread: number; link_active: boolean
 }
+/** One additional requirement inside a conversation (agency view: passengers/files are filtered by item_id from the flat lists). */
+export interface ClientRequestItem {
+  id: string; request_type: RequestType; description: string; observations: string; details: Record<string, string | number>; created_at: string
+}
 export interface ClientRequestFull extends ClientRequestRow {
   observations: string; details: Record<string, string | number>; closed_at: string | null; closed_by: string | null; reopened_at: string | null
   details_history: { request_type: RequestType | null; details: Record<string, string | number>; description: string; changed_at: string }[]
-  passengers: RequestPassenger[]; messages: RequestMessage[]; attachments: RequestAttachment[]
+  passengers: RequestPassenger[]; messages: RequestMessage[]; attachments: RequestAttachment[]; items: ClientRequestItem[]
+}
+
+/** An additional requirement in the client's conversation, with its own passengers and files. */
+export interface PortalItem {
+  id: string; request_type: RequestType; description: string; observations: string; details: Record<string, string | number>; created_at: string
+  passengers: RequestPassenger[]
+  attachments: RequestAttachment[]
 }
 
 /** What the public portal receives (no internal fields). */
@@ -35,6 +46,7 @@ export interface PortalData {
     request_type: RequestType | null; description: string; observations: string; details: Record<string, string | number>; last_message_author: 'client' | 'agency' | null }
   passengers: RequestPassenger[]
   attachments: RequestAttachment[]
+  items: PortalItem[]
   messages: RequestMessage[]
 }
 

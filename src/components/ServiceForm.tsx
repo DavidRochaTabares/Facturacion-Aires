@@ -1,10 +1,10 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, FileText, Paperclip, Plus, Trash2 } from 'lucide-react'
 import { useAsync } from '../hooks'
 import { money } from '../lib/format'
-import { GROUPABLE, isRealPassenger, loanIva, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
+import { DOC_CATEGORIES, DOC_CATEGORY_LABEL, flightMissing, GROUPABLE, isRealPassenger, loanIva, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
 import { dataService } from '../services'
-import type { DetailsMap, OperationInput, OperationType, PassengerData, SegmentData } from '../types'
+import type { DetailsMap, DocCategory, OperationInput, OperationType, PassengerData, PendingDoc, SegmentData } from '../types'
 import { AIRLINES } from '../constants/airlines'
 import { CardSelect, SupplierSelect } from './SupplierFields'
 import { Field, Select, Spinner, TextInput } from './ui'
@@ -47,14 +47,16 @@ const costOf = (type: OperationType, amount: number, d: any) =>
 interface Props {
   type: OperationType
   initial?: Partial<OperationInput>
+  /** Files already chosen outside the form (e.g. the analyzed PDF): they appear categorized and can be changed or removed. */
+  initialDocs?: PendingDoc[]
   submitLabel?: string
   busy?: boolean
-  onSubmit: (input: OperationInput) => void | Promise<void>
+  onSubmit: (input: OperationInput, docs: PendingDoc[]) => void | Promise<void>
   onCancel?: () => void
   children?: ReactNode
 }
 
-export default function ServiceForm({ type, initial, submitLabel = 'Guardar registro', busy, onSubmit, onCancel, children }: Props) {
+export default function ServiceForm({ type, initial, initialDocs, submitLabel = 'Guardar registro', busy, onSubmit, onCancel, children }: Props) {
   const { data: companies } = useAsync(() => dataService.getCompanies(), [])
   const { data: groups } = useAsync(() => dataService.getGroups(), [])
   const { data: suppliers } = useAsync(() => dataService.getSuppliers(), [])
@@ -71,6 +73,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
   })
   const [groupSel, setGroupSel] = useState(initial?.group_id ?? '')
   const [groupLabel, setGroupLabel] = useState('')
+  const [docs, setDocs] = useState<PendingDoc[]>(initialDocs ?? [])
   const [err, setErr] = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState('')
 
@@ -81,20 +84,21 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
   const auto = MARKUP[type] !== undefined
   const pct = Math.round(((MARKUP[type] ?? 1) - 1) * 100)
   const cost = costOf(type, c.amount, d)
+  // When editing, a stored value is the definitive one the user saved: suggestions never overwrite it silently.
   const [touched, setTouched] = useState(() => {
     const ch = initial?.charge_amount ?? 0
-    return ch > 0 && ch !== suggestCharge(costOf(type, initial?.amount ?? 0, initial?.details ?? {}), type)
+    return ch > 0 && (editing || ch !== suggestCharge(costOf(type, initial?.amount ?? 0, initial?.details ?? {}), type))
   })
   const charge = auto && !touched ? suggestCharge(cost, type) : c.charge_amount
   const initCharge = (initial?.charge_amount ?? 0) > 0 ? (initial?.charge_amount as number) : suggestCharge(costOf(type, initial?.amount ?? 0, initial?.details ?? {}), type)
   const [totalTouched, setTotalTouched] = useState(() => {
     const x: any = initial?.details
-    return isBilled && x?.total_invoice != null && x.total_invoice !== initCharge
+    return isBilled && x?.total_invoice != null && (editing || x.total_invoice !== initCharge)
   })
   const totalShown: number | null = totalTouched ? d.total_invoice ?? null : (charge || null)
   const [netTouched, setNetTouched] = useState(() => {
     const x: any = initial?.details
-    return isBilled && x?.net_quote_minus_iva_ta != null && x.net_quote_minus_iva_ta !== netOf(x.total_invoice ?? initCharge, x.ta)
+    return isBilled && x?.net_quote_minus_iva_ta != null && (editing || x.net_quote_minus_iva_ta !== netOf(x.total_invoice ?? initCharge, x.ta))
   })
   const netShown: number | null = netTouched ? d.net_quote_minus_iva_ta ?? null : netOf(totalShown, d.ta)
 
@@ -145,7 +149,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
   const add = (key: 'segments' | 'passengers') => setD((p: any) => ({ ...p, [key]: [...p[key], key === 'segments' ? emptySeg() : emptyPax()] }))
   const del = (key: 'segments' | 'passengers', i: number) => setD((p: any) => ({ ...p, [key]: p[key].filter((_: unknown, j: number) => j !== i) }))
 
-  const miss = type === 'loan' ? loanMissing(c.amount, c.invoice_number, d) : []
+  const miss = type === 'loan' ? loanMissing(c.amount, c.invoice_number, d) : type === 'flight' ? flightMissing(d, editing ? ((initial as { documents?: { category?: string }[] } | undefined)?.documents ?? []) : docs) : []
   const warn = (l: string) => miss.includes(l)
 
   const submit = (e: FormEvent) => {
@@ -186,7 +190,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
     Promise.resolve(onSubmit({
       ...c, amount, charge_amount: charge, type, details,
       group_id: canGroup ? (groupSel && groupSel !== '__new__' ? groupSel : null) : initial?.group_id ?? null, group_label: canGroup && groupSel === '__new__' ? groupLabel : undefined,
-    } as OperationInput)).catch(e => setSubmitError(e instanceof Error ? e.message : 'No se pudo guardar'))
+    } as OperationInput, docs)).catch(e => setSubmitError(e instanceof Error ? e.message : 'No se pudo guardar'))
   }
 
   const grid = 'grid gap-3 sm:grid-cols-2'
@@ -249,7 +253,7 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
 
   return (
     <form noValidate onSubmit={submit} className="space-y-4">
-      {type === 'loan' && miss.length > 0 && (
+      {(type === 'loan' || type === 'flight') && miss.length > 0 && (
         <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
           <p className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300"><AlertTriangle size={16} />Información incompleta</p>
           <p className="mt-1 text-muted">Faltan: {miss.join(', ')}. Puedes guardar igual; el registro quedará marcado como incompleto.</p>
@@ -470,6 +474,28 @@ export default function ServiceForm({ type, initial, submitLabel = 'Guardar regi
         </Select>
         {groupSel === '__new__' && <TextInput label="Nombre del nuevo grupo" value={groupLabel} onChange={e => setGroupLabel(e.target.value)} />}
       </div></>}
+
+      {!editing && (
+        <>
+          <H>Documentos</H>
+          <div className="space-y-2">
+            {docs.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 rounded-lg border border-line p-2.5">
+                <FileText size={16} className="shrink-0 text-brand" />
+                <span className="min-w-0 flex-1 truncate text-sm" title={f.file.name}>{f.file.name}</span>
+                <select className="input !w-auto !px-2 !py-1 text-xs" value={f.category} aria-label="Categoría del documento"
+                  onChange={e => setDocs(p => p.map((x, j) => (j === i ? { ...x, category: e.target.value as DocCategory } : x)))}>
+                  {DOC_CATEGORIES.map(c => <option key={c} value={c}>{DOC_CATEGORY_LABEL[c]}</option>)}
+                </select>
+                <button type="button" aria-label="Quitar archivo" className="p-1 rounded text-muted hover:bg-red-500/10 hover:text-red-600" onClick={() => setDocs(p => p.filter((_, j) => j !== i))}><Trash2 size={14} /></button>
+              </div>
+            ))}
+            <label className="btn-ghost w-fit cursor-pointer"><Paperclip size={14} />Adjuntar documento
+              <input type="file" multiple accept="application/pdf,image/*" className="hidden"
+                onChange={e => { const fs = [...(e.target.files ?? [])]; if (fs.length) setDocs(p => [...p, ...fs.map(file => ({ file, category: 'other' as DocCategory }))]); e.target.value = '' }} /></label>
+          </div>
+        </>
+      )}
 
       <H>Observaciones</H>
       <textarea aria-label="Observaciones" className="input min-h-20" {...sc('observations')} />

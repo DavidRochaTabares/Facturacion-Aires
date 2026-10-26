@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Copy, KeyRound, Lock, LockOpen, Paperclip, Send, Trash2, Unlink } from 'lucide-react'
+import { Copy, KeyRound, Lock, LockOpen, MessageCircle, Paperclip, Send, Trash2, Unlink } from 'lucide-react'
 import { copyText } from '../lib/clipboard'
 import { requestsService, type CleanupResult } from '../services/requests'
 import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment } from '../types/requests'
@@ -11,6 +11,16 @@ const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('es-CO
 const dmy = (d?: string | number) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '')
 const POLL_MS = 15_000
 
+/** Field→label mapping shared by the main request and each additional item (only the service's own fields show up). */
+const detailFacts = (d: Record<string, string | number>): [string, string][] => ([
+  ['Origen', String(d.origin ?? '')], ['Destino', String(d.destination ?? '')], ['Salida', dmy(d.departure_date)], ['Regreso', dmy(d.return_date)],
+  ['Viaje', d.scope ? `${d.scope === 'international' ? 'Internacional' : 'Nacional'} · ${d.trip_type === 'roundtrip' ? 'ida y vuelta' : 'solo ida'}` : ''],
+  ['Entrada', dmy(d.check_in)], ['Salida del hotel', dmy(d.check_out)], ['Huéspedes', String(d.guests ?? '')], ['Habitaciones', String(d.rooms ?? '')],
+  ['Fecha del servicio', dmy(d.service_date)], ['Hora', String(d.time ?? '')], ['Ubicación', String(d.location ?? '')], ['Personas', String(d.people ?? '')],
+  ['Inicio', dmy(d.date_from)], ['Fin', dmy(d.date_to)], ['Fechas', String(d.dates ?? '')], ['Datos adicionales', String(d.extra ?? '')],
+  ['Preferencias', String(d.preferences ?? d.itinerary_notes ?? '')],
+] as [string, string][]).filter(([, v]) => v)
+
 type Action =
   | { kind: 'close' } | { kind: 'reopen' } | { kind: 'regenerate' } | { kind: 'revoke' } | { kind: 'delete' }
   | { kind: 'del-message'; id: string } | { kind: 'del-attachment'; id: string; name: string } | { kind: 'del-passenger'; id: string; name: string }
@@ -19,14 +29,21 @@ type Action =
 export function LinkModal({ link, onClose }: { link: { token: string; name: string } | null; onClose: () => void }) {
   const [state, setState] = useState<'idle' | 'ok' | 'error'>('idle')
   const url = link ? requestsService.link(link.token) : ''
+  const name = link?.name.trim() ?? ''
+  // Official WhatsApp share mechanism: opens the app/tab with the message ready to send (nothing is sent automatically).
+  const waText = name
+    ? `Hola, ${name}. Te compartimos este enlace para que puedas registrar tus requerimientos con Aires y Destinos: ${url}\nDesde allí podrás ingresar la información y adjuntar los documentos necesarios.`
+    : `Te compartimos este enlace para que puedas registrar tus requerimientos con Aires y Destinos: ${url}\nDesde allí podrás ingresar la información y adjuntar los documentos necesarios.`
+  const wa = `https://wa.me/?text=${encodeURIComponent(waText)}`
   useEffect(() => setState('idle'), [link])
   return (
     <Modal open={!!link} onClose={onClose} title="Enlace privado generado">
       <div className="space-y-3 text-sm">
-        <p>Envía este enlace {link?.name ? <>a <b>{link.name}</b></> : 'al cliente'} por WhatsApp, correo u otro medio. El cliente completará sus datos y elegirá qué necesita. Solo quien tenga el enlace puede abrir esta conversación.</p>
+        <p>Envía este enlace {name ? <>a <b>{name}</b></> : 'al cliente'} por WhatsApp, correo u otro medio. El cliente completará sus datos y elegirá qué necesita. Solo quien tenga el enlace puede abrir esta conversación.</p>
         <input className="input font-mono text-xs" readOnly value={url} onFocus={e => e.target.select()} aria-label="Enlace privado" />
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="btn-primary" onClick={async () => { try { await copyText(url); setState('ok') } catch { setState('error') } }}><Copy size={14} />Copiar enlace</button>
+          <a href={wa} target="_blank" rel="noreferrer" className="btn-ghost"><MessageCircle size={14} />Compartir por WhatsApp</a>
           <span role="status" className={state === 'error' ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}>{state === 'ok' && 'Enlace copiado.'}{state === 'error' && 'No se pudo copiar. Selecciónalo y cópialo manualmente.'}</span>
         </div>
         <p className="rounded-lg bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">Por seguridad el enlace se muestra solo ahora (en la base de datos se guarda únicamente su huella). Si lo pierdes, usa «Regenerar enlace»: el anterior dejará de funcionar.</p>
@@ -111,13 +128,11 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
   const facts: [string, string][] = full ? ([
     ['Cliente', full.client_name], ['Correo', full.client_email], ['Teléfono', full.client_phone], ['Tipo', typeLabel(full.request_type)], ['Creada', when(full.created_at)],
     ['Enviada por el cliente', full.submitted_at ? when(full.submitted_at) : 'Aún no completa el formulario'], ['Última actividad', when(full.last_activity_at)],
-    ['Origen', String(d.origin ?? '')], ['Destino', String(d.destination ?? '')], ['Salida', dmy(d.departure_date)], ['Regreso', dmy(d.return_date)],
-    ['Viaje', d.scope ? `${d.scope === 'international' ? 'Internacional' : 'Nacional'} · ${d.trip_type === 'roundtrip' ? 'ida y vuelta' : 'solo ida'}` : ''],
-    ['Entrada', dmy(d.check_in)], ['Salida del hotel', dmy(d.check_out)], ['Huéspedes', String(d.guests ?? '')], ['Habitaciones', String(d.rooms ?? '')],
-    ['Fecha del servicio', dmy(d.service_date)], ['Hora', String(d.time ?? '')], ['Ubicación', String(d.location ?? '')], ['Personas', String(d.people ?? '')],
-    ['Inicio', dmy(d.date_from)], ['Fin', dmy(d.date_to)], ['Fechas', String(d.dates ?? '')], ['Preferencias', String(d.preferences ?? d.itinerary_notes ?? d.extra ?? '')],
+    ...detailFacts(d),
     ['Cerrada', full.closed_at ? when(full.closed_at) : ''], ['Enlace', full.link_active ? 'Activo' : 'Revocado'],
   ] as [string, string][]).filter(([, v]) => v) : []
+  const mainPax = full?.passengers.filter(p => !p.item_id) ?? []
+  const mainSupporting = full?.attachments.filter(a => a.kind === 'supporting' && !a.item_id) ?? []
 
   const attBtn = (a: RequestAttachment, auto = false) => (
     <li key={a.id} className="w-72 max-w-full">
@@ -170,9 +185,9 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
               </section>
             )}
 
-            {full.passengers.length > 0 && (
-              <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Pasajeros ({full.passengers.length})</h3>
-                <div className="grid gap-2 sm:grid-cols-2">{full.passengers.map(p => (
+            {mainPax.length > 0 && (
+              <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Pasajeros ({mainPax.length})</h3>
+                <div className="grid gap-2 sm:grid-cols-2">{mainPax.map(p => (
                   <div key={p.id} className="rounded-lg border border-line p-3 text-sm">
                     <div className="flex items-start justify-between gap-2"><div><p className="font-medium">{p.first_names} {p.last_names}</p><p className="text-xs text-muted">{p.document_type} {p.document_number} · Nac. {dmy(p.birth_date)}</p></div>
                       <button type="button" title="Eliminar pasajero" aria-label={`Eliminar pasajero ${p.first_names} ${p.last_names}`} onClick={() => { setActionError(''); setAction({ kind: 'del-passenger', id: p.id, name: `${p.first_names} ${p.last_names}` }) }} className="rounded p-1.5 text-muted hover:bg-red-500/10 hover:text-red-600"><Trash2 size={14} /></button></div>
@@ -180,8 +195,33 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
                   </div>))}</div>
               </section>
             )}
-            {full.attachments.some(a => a.kind === 'supporting') && (
-              <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Archivos complementarios</h3><ul className="space-y-1">{full.attachments.filter(a => a.kind === 'supporting').map(a => attBtn(a))}</ul></section>
+            {mainSupporting.length > 0 && (
+              <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Archivos complementarios</h3><ul className="space-y-1">{mainSupporting.map(a => attBtn(a))}</ul></section>
+            )}
+
+            {full.items.length > 0 && (
+              <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Requerimientos adicionales ({full.items.length})</h3>
+                <div className="space-y-3">{full.items.map(it => {
+                  const pax = full.passengers.filter(p => p.item_id === it.id)
+                  const files = full.attachments.filter(a => a.item_id === it.id && a.kind === 'supporting')
+                  return (
+                    <div key={it.id} className="rounded-lg border border-line p-3">
+                      <p className="text-sm font-medium">{typeLabel(it.request_type)} <span className="font-normal text-muted">· {when(it.created_at)}</span></p>
+                      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">{detailFacts(it.details).map(([k, v]) => <div key={k}><dt className="text-xs text-muted">{k}</dt><dd className="break-words text-sm">{v}</dd></div>)}</dl>
+                      {it.description && <p className="mt-2 whitespace-pre-wrap text-sm">{it.description}</p>}
+                      {it.observations && <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{it.observations}</p>}
+                      {pax.length > 0 && (
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2">{pax.map(p => (
+                          <div key={p.id} className="rounded-lg border border-line p-3 text-sm">
+                            <div className="flex items-start justify-between gap-2"><div><p className="font-medium">{p.first_names} {p.last_names}</p><p className="text-xs text-muted">{p.document_type} {p.document_number} · Nac. {dmy(p.birth_date)}</p></div>
+                              <button type="button" title="Eliminar pasajero" aria-label={`Eliminar pasajero ${p.first_names} ${p.last_names}`} onClick={() => { setActionError(''); setAction({ kind: 'del-passenger', id: p.id, name: `${p.first_names} ${p.last_names}` }) }} className="rounded p-1.5 text-muted hover:bg-red-500/10 hover:text-red-600"><Trash2 size={14} /></button></div>
+                            {full.attachments.filter(a => a.passenger_id === p.id).length === 0 ? <p className="mt-2 text-xs text-muted">Sin documento de identidad.</p> : <ul className="mt-2 space-y-1">{full.attachments.filter(a => a.passenger_id === p.id).map(a => attBtn(a))}</ul>}
+                          </div>))}</div>
+                      )}
+                      {files.length > 0 && <ul className="mt-2 space-y-1">{files.map(a => attBtn(a))}</ul>}
+                    </div>)
+                })}</div>
+              </section>
             )}
 
             <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Conversación</h3>

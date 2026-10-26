@@ -1,4 +1,16 @@
-import type { LoanData, OperationInput, OperationRow, OperationType } from '../types'
+import type { DocCategory, FlightData, LoanData, OperationInput, OperationRow, OperationType, PersonalKind } from '../types'
+
+export const DOC_CATEGORIES: DocCategory[] = ['ticket', 'payment', 'supplier_invoice', 'agency_invoice', 'other']
+export const DOC_CATEGORY_LABEL: Record<DocCategory, string> = {
+  ticket: 'Tiquete / itinerario',
+  payment: 'Soporte de pago',
+  supplier_invoice: 'Factura proveedor',
+  agency_invoice: 'Factura Aires y Destinos',
+  other: 'Otros documentos',
+}
+export const PERSONAL_CATEGORIES = ['Alimentación', 'Transporte', 'Vivienda', 'Servicios', 'Salud', 'Compras', 'Entretenimiento', 'Transferencias', 'Otros']
+export const PERSONAL_METHODS = ['Efectivo', 'Transferencia', 'Tarjeta débito', 'Tarjeta crédito', 'Otro']
+export const PERSONAL_KIND_LABEL: Record<PersonalKind, string> = { income: 'Ingreso', expense: 'Gasto' }
 
 export const GROUPABLE: OperationType[] = ['flight', 'hotel']
 export const MARKUP: Partial<Record<OperationType, number>> = { flight: 1.3, hotel: 1.3, loan: 1.2, food: 1.2 }
@@ -17,6 +29,18 @@ export function loanMissing(amount: number, invoice_number: string, d: Partial<L
     ['OC', d.oc], ['Recibida', d.received], ['Solicitó', d.requested_by],
   ]
   return m.filter(([, v]) => !(typeof v === 'string' ? v.trim() : v)).map(([k]) => k)
+}
+
+/** Flight requirements for a complete record: itinerary data plus the three document categories. Never blocks saving. */
+export function flightMissing(d: Partial<FlightData>, docs: { category?: string }[]): string[] {
+  const m: [string, unknown][] = [
+    ['Aerolínea', d.airline?.trim()],
+    ['Itinerario', (d.segments ?? []).some(s => s.origin?.trim() && s.destination?.trim() && s.departure_date)],
+    ['Soporte de pago', docs.some(x => x.category === 'payment')],
+    ['Factura proveedor', docs.some(x => x.category === 'supplier_invoice')],
+    ['Factura Aires y Destinos', docs.some(x => x.category === 'agency_invoice')],
+  ]
+  return m.filter(([, v]) => !v).map(([k]) => k)
 }
 
 export function summary(r: OperationRow) {

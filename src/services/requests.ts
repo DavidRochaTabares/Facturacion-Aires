@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { normalizeDocFile } from '../lib/files'
-import type { ClientRequestFull, ClientRequestRow, RequestAttachment, RequestMessage, RequestPassenger, RequestType } from '../types/requests'
+import type { ClientRequestFull, ClientRequestItem, ClientRequestRow, RequestAttachment, RequestMessage, RequestPassenger, RequestType } from '../types/requests'
 
 // Agency side of "Solicitudes de clientes". Every call runs with the agency's Supabase session: RLS and the cr_* functions validate session and
 // permissions in the database on every operation. No privileged key exists in the browser.
@@ -55,23 +55,24 @@ export const requestsService = {
   },
 
   async get(id: string): Promise<ClientRequestFull | null> {
-    const [r, p, m, a] = await Promise.all([
+    const [r, p, m, a, it] = await Promise.all([
       supabase.from('client_requests').select(`${LIST_COLS},observations,details,details_history,closed_at,closed_by,reopened_at`).eq('id', id).maybeSingle(),
-      supabase.from('client_request_passengers').select('id,first_names,last_names,document_type,document_number,birth_date').eq('request_id', id).order('position'),
+      supabase.from('client_request_passengers').select('id,first_names,last_names,document_type,document_number,birth_date,item_id').eq('request_id', id).order('position'),
       supabase.from('client_request_messages').select('id,author,body,created_at').eq('request_id', id).order('created_at').order('id'),
-      supabase.from('client_request_attachments').select('id,kind,passenger_id,message_id,file_name,mime_type,size_bytes,uploaded_by,created_at,storage_path').eq('request_id', id).order('created_at'),
+      supabase.from('client_request_attachments').select('id,kind,passenger_id,message_id,item_id,file_name,mime_type,size_bytes,uploaded_by,created_at,storage_path').eq('request_id', id).order('created_at'),
+      supabase.from('client_request_items').select('id,request_type,description,observations,details,created_at').eq('request_id', id).order('position'),
     ])
-    for (const x of [r, p, m, a]) if (x.error) fail(x.error)
+    for (const x of [r, p, m, a, it]) if (x.error) fail(x.error)
     if (!r.data) return null
     return {
       ...mapRow(r.data), observations: r.data.observations ?? '', details: (r.data.details ?? {}) as Record<string, string | number>, closed_at: r.data.closed_at, closed_by: r.data.closed_by, reopened_at: r.data.reopened_at, details_history: (r.data.details_history ?? []) as ClientRequestFull['details_history'],
-      passengers: (p.data ?? []) as RequestPassenger[], messages: (m.data ?? []) as RequestMessage[], attachments: (a.data ?? []) as RequestAttachment[],
+      passengers: (p.data ?? []) as RequestPassenger[], messages: (m.data ?? []) as RequestMessage[], attachments: (a.data ?? []) as RequestAttachment[], items: (it.data ?? []) as ClientRequestItem[],
     }
   },
 
   /** Creates an EMPTY conversation + private link: the client chooses the service type and fills in their own data from the link. */
-  async create(): Promise<{ id: string; token: string }> {
-    const { data, error } = await supabase.rpc('create_client_request', {})
+  async create(name = ''): Promise<{ id: string; token: string }> {
+    const { data, error } = await supabase.rpc('create_client_request', { p_name: name.trim() || '' })
     if (error) fail(error)
     return data as { id: string; token: string }
   },

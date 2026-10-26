@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, FileText, FilterX } from 'lucide-react'
+import { FileText, FilterX } from 'lucide-react'
 import { BarList, DonutChart } from '../components/charts'
 import ReportBuilder from '../components/ReportBuilder'
 import { Empty, Loading, PageHeader, Select, TextInput } from '../components/ui'
@@ -21,7 +21,7 @@ export default function Reports() {
   ]
   return (
     <>
-      <PageHeader title="Reportes" subtitle="Análisis por periodo, empresa y proveedor" actions={<><button className="btn-primary" onClick={() => setBuild(true)}><FileText size={16} />Crear informe</button><button className="btn-ghost" onClick={() => alert('Exportación disponible próximamente')}><Download size={16} />Exportar Excel</button></>} />
+      <PageHeader title="Reportes" subtitle="Análisis por periodo, empresa y proveedor" actions={<button className="btn-primary" onClick={() => setBuild(true)}><FileText size={16} />Crear informe</button>} />
       <div className="card p-3 mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5 items-end">
         <div className="sm:col-span-2 lg:col-span-5 flex justify-end -mb-1"><button type="button" className="btn-ghost" onClick={() => setF({})}><FilterX size={14} />Limpiar filtros</button></div>
         <TextInput label="Desde" type="date" value={f.date_from ?? ''} onChange={set('date_from')} />

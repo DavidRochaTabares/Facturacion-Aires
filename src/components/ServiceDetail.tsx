@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlertTriangle, Eye, FileText, Paperclip, Pencil } from 'lucide-react'
+import { AlertTriangle, Eye, FileText, Paperclip, Pencil, Trash2 } from 'lucide-react'
 import { dataService } from '../services'
 import { fdate, fsize, money, SERVICE_LABEL } from '../lib/format'
-import { summary } from '../lib/service'
-import type { DocumentFile, OperationRow } from '../types'
+import { DOC_CATEGORIES, DOC_CATEGORY_LABEL, summary } from '../lib/service'
+import type { DocCategory, DocumentFile, OperationRow } from '../types'
 import { BillingSummary } from './BillingSummary'
+import { DeleteDialog } from './DeleteDialog'
 import ServiceForm from './ServiceForm'
 import { Drawer, FilePreview, Loading, Modal, TypeBadge } from './ui'
 
@@ -77,15 +78,29 @@ export default function ServiceDetail({ id, startEdit, onClose, onChanged, onNav
   const [edit, setEdit] = useState(false)
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<{ doc: DocumentFile; url: string } | null>(null)
+  const [delDoc, setDelDoc] = useState<DocumentFile | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
+  const [delError, setDelError] = useState('')
+  const [invAlert, setInvAlert] = useState<{ due_date: string; invoice_number: string } | null>(null)
 
   const load = async (i: string) => {
     const r = await dataService.getOperationById(i)
     setRow(r)
     setSiblings(r?.group_id ? (await dataService.getOperations()).filter(x => x.group_id === r.group_id) : [])
+    setInvAlert((await dataService.getInvoiceAlerts().catch(() => [])).find(a => a.operation_id === i) ?? null)
   }
   useEffect(() => { setEdit(!!startEdit); setRow(null); if (id) load(id) }, [id, startEdit])
   const open = async (doc: DocumentFile) => {
     try { setPreview({ doc, url: await dataService.getDocumentUrl(doc) }) } catch (e) { alert(e instanceof Error ? e.message : 'No se pudo abrir el documento') }
+  }
+  const confirmDelDoc = async () => {
+    if (!delDoc || !row) return
+    setDelBusy(true); setDelError('')
+    try {
+      const r = await dataService.deleteDocument(delDoc.id)
+      setDelDoc(null); onChanged(); load(row.id)
+      if (r.filesNotRemoved) alert('El documento se desvinculó del registro, pero el archivo no se pudo borrar del almacenamiento.')
+    } catch (e) { setDelError(e instanceof Error ? e.message : 'No se pudo eliminar el archivo.') } finally { setDelBusy(false) }
   }
   const s = row && summary(row)
 
@@ -99,7 +114,7 @@ export default function ServiceDetail({ id, startEdit, onClose, onChanged, onNav
           <>
             <div className="flex items-start justify-between gap-3">
               <div><TypeBadge type={row.type} /><h2 className="text-lg font-semibold mt-2">{s?.route || SERVICE_LABEL[row.type]}</h2><p className="text-sm text-muted">{row.company_name} · {fdate(row.date)}</p></div>
-              <div className="text-right"><p className="text-xs text-muted">A cobrar</p><p className="text-xl font-semibold tabular-nums">{money(row.charge_amount)}</p><button className="btn-ghost mt-2" onClick={() => setEdit(true)}><Pencil size={14} />Editar</button></div>
+              <div className="text-right"><p className="text-xs text-muted">{(row.type === 'flight' || row.type === 'hotel') && (row.details as { total_invoice?: number | null }).total_invoice != null ? 'Total factura' : 'A cobrar'}</p><p className="text-xl font-semibold tabular-nums">{money((row.type === 'flight' || row.type === 'hotel' ? ((row.details as { total_invoice?: number | null }).total_invoice ?? row.charge_amount) : row.charge_amount))}</p><button className="btn-ghost mt-2" onClick={() => setEdit(true)}><Pencil size={14} />Editar</button></div>
             </div>
             {row.missing.length > 0 && (
               <div className="mt-4 rounded-lg border border-amber-500/50 bg-amber-500/10 p-3">
@@ -107,6 +122,12 @@ export default function ServiceDetail({ id, startEdit, onClose, onChanged, onNav
                 <p className="text-sm text-muted mt-1">Faltan:</p>
                 <ul className="text-sm list-disc pl-5">{row.missing.map(x => <li key={x}>{x}</li>)}</ul>
                 <button className="btn-primary mt-3" onClick={() => setEdit(true)}>Completar información</button>
+              </div>
+            )}
+            {invAlert && (
+              <div className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+                <p className="flex items-center gap-2 text-sm font-medium text-red-700 dark:text-red-300"><AlertTriangle size={16} />Factura pendiente de cobro</p>
+                <p className="text-sm text-muted mt-1">{invAlert.invoice_number ? `Factura ${invAlert.invoice_number} · ` : ''}Corresponde cobrarla el {fdate(invAlert.due_date)}. Se cierra al registrar un movimiento bancario con ese número de factura.</p>
               </div>
             )}
             {row.group && (
@@ -130,20 +151,51 @@ export default function ServiceDetail({ id, startEdit, onClose, onChanged, onNav
             <BillingSummary row={row} />
             <H>Documentos</H>
             {row.documents.length === 0 && <p className="text-sm text-muted mb-2">Sin documentos asociados.</p>}
-            {row.documents.map(doc => (
-              <div key={doc.id} className="flex items-center gap-3 rounded-lg border border-line p-3 mb-2">
-                <FileText size={18} className="text-brand" /><div className="flex-1 min-w-0"><p className="text-sm truncate">{doc.name}</p><p className="text-xs text-muted">{fsize(doc.size)} · {fdate(doc.created_at)}</p></div>
-                <button className="btn-ghost" onClick={() => open(doc)}><Eye size={14} />Ver</button>
-              </div>
-            ))}
-            <label className="btn-ghost cursor-pointer"><Paperclip size={14} />Adjuntar documento
-              <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async e => { const f = e.target.files?.[0]; if (f) { try { await dataService.addDocument(row.id, f); onChanged(); load(row.id) } catch (err) { alert(err instanceof Error ? err.message : 'No se pudo subir el documento') } } e.target.value = '' }} /></label>
+            {DOC_CATEGORIES.map(cat => {
+              const list = row.documents.filter(x => x.category === cat)
+              if (!list.length) return null
+              return (
+                <div key={cat} className="mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-1.5">{DOC_CATEGORY_LABEL[cat]}</p>
+                  {list.map(doc => (
+                    <div key={doc.id} className="flex items-center gap-2 rounded-lg border border-line p-3 mb-2">
+                      <FileText size={18} className="shrink-0 text-brand" /><div className="flex-1 min-w-0"><p className="text-sm truncate">{doc.name}</p><p className="text-xs text-muted">{fsize(doc.size)} · {fdate(doc.created_at)}</p></div>
+                      <select aria-label="Categoría" className="input !w-auto !px-2 !py-1 text-xs" value={doc.category}
+                        onChange={async e => { try { await dataService.updateDocumentCategory(doc.id, e.target.value as DocCategory); onChanged(); load(row.id) } catch (err) { alert(err instanceof Error ? err.message : 'No se pudo cambiar la categoría') } }}>
+                        {DOC_CATEGORIES.map(c => <option key={c} value={c}>{DOC_CATEGORY_LABEL[c]}</option>)}
+                      </select>
+                      <button className="btn-ghost" onClick={() => open(doc)}><Eye size={14} />Ver</button>
+                      <button title="Eliminar archivo" aria-label="Eliminar archivo" className="p-1.5 rounded text-muted hover:bg-red-500/10 hover:text-red-600" onClick={() => { setDelError(''); setDelDoc(doc) }}><Trash2 size={15} /></button>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+            <div className="flex flex-wrap items-center gap-2">
+              <Paperclip size={14} className="text-muted" />
+              <select aria-label="Categoría del nuevo documento" id="new-doc-cat" className="input !w-auto !px-2 !py-1.5 text-xs" defaultValue="other">
+                {DOC_CATEGORIES.map(c => <option key={c} value={c}>{DOC_CATEGORY_LABEL[c]}</option>)}
+              </select>
+              <label className="btn-ghost cursor-pointer">Adjuntar documento
+                <input type="file" accept="application/pdf,image/*" className="hidden" onChange={async e => {
+                  const f = e.target.files?.[0]
+                  if (f) {
+                    const cat = ((document.getElementById('new-doc-cat') as HTMLSelectElement)?.value || 'other') as DocCategory
+                    try { await dataService.addDocument(row.id, f, cat); onChanged(); load(row.id) } catch (err) { alert(err instanceof Error ? err.message : 'No se pudo subir el documento') }
+                  }
+                  e.target.value = ''
+                }} /></label>
+            </div>
           </>
         )}
       </Drawer>
       <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.doc.name ?? ''}>
         <div className="h-[60vh]"><FilePreview url={preview?.url ?? null} mime={preview?.doc.mime_type} className="h-full" /></div>
       </Modal>
+      <DeleteDialog open={!!delDoc} title="Eliminar documento" busy={delBusy} error={delError} onCancel={() => setDelDoc(null)} onConfirm={confirmDelDoc}>
+        {delDoc && <p><b>{delDoc.name}</b> · {DOC_CATEGORY_LABEL[delDoc.category]} · {fsize(delDoc.size)}</p>}
+        <p className="mt-2 text-muted">Solo se elimina este archivo. El registro y sus demás documentos no se modifican.</p>
+      </DeleteDialog>
     </>
   )
 }

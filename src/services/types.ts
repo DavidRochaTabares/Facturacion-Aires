@@ -1,6 +1,7 @@
 import type {
-  AuthSession, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocumentFile, ExtractedFlight, ExtractedFood, ExtractedHotel, ExtractedLoan,
-  DeleteResult, DeleteSummary, OperationFilters, OperationGroup, OperationInput, OperationInputOf, OperationRow, ServiceReport, BankDocument, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
+  AuthSession, BankFilters, BankMovementInput, BankMovementRow, BankReport, Company, CompanyInput, DashboardStats, DocCategory, DocumentFile, ExtractedFlight, ExtractedFood, ExtractedHotel, ExtractedLoan,
+  DeleteResult, DeleteSummary, InvoiceAlert, OperationFilters, OperationGroup, OperationInput, OperationInputOf, OperationRow, PendingDoc, PersonalFilters, PersonalMovementInput, PersonalMovementRow,
+  ServiceReport, BankDocument, PersonalDocument, PaymentCard, PaymentCardInput, Supplier, SupplierInput,
 } from '../types'
 
 export interface AuthService {
@@ -19,7 +20,7 @@ export interface DataService {
 
   getOperations(filters?: OperationFilters): Promise<OperationRow[]>
   getOperationById(id: string): Promise<OperationRow | null>
-  createOperation(input: OperationInput, file?: File | null): Promise<OperationRow>
+  createOperation(input: OperationInput, docs?: PendingDoc[]): Promise<OperationRow>
   updateOperation(id: string, input: OperationInput): Promise<OperationRow>
   deleteOperations(ids: string[]): Promise<DeleteSummary>
   deleteBankMovement(id: string): Promise<DeleteSummary>
@@ -36,10 +37,10 @@ export interface DataService {
   deleteCard(id: string): Promise<DeleteResult>
 
   getFlight(operationId: string): Promise<OperationInputOf<'flight'>['details'] | null>
-  createFlight(input: OperationInputOf<'flight'>, file?: File | null): Promise<OperationRow>
+  createFlight(input: OperationInputOf<'flight'>, docs?: PendingDoc[]): Promise<OperationRow>
   updateFlight(id: string, input: OperationInputOf<'flight'>): Promise<OperationRow>
   getLoan(operationId: string): Promise<OperationInputOf<'loan'>['details'] | null>
-  createLoan(input: OperationInputOf<'loan'>, file?: File | null): Promise<OperationRow>
+  createLoan(input: OperationInputOf<'loan'>, docs?: PendingDoc[]): Promise<OperationRow>
   updateLoan(id: string, input: OperationInputOf<'loan'>): Promise<OperationRow>
   getFood(operationId: string): Promise<OperationInputOf<'food'>['details'] | null>
   createFood(input: OperationInputOf<'food'>): Promise<OperationRow>
@@ -52,7 +53,9 @@ export interface DataService {
   updateTransport(id: string, input: OperationInputOf<'transport'>): Promise<OperationRow>
 
   getDocuments(operationId: string): Promise<DocumentFile[]>
-  addDocument(operationId: string, file: File): Promise<DocumentFile>
+  addDocument(operationId: string, file: File, category?: DocCategory): Promise<DocumentFile>
+  updateDocumentCategory(docId: string, category: DocCategory): Promise<void>
+  deleteDocument(docId: string): Promise<DeleteSummary>
   getDocumentUrl(doc: { name: string; mime_type: string; storage_path?: string; url?: string }): Promise<string>
 
   getBankMovements(filters?: BankFilters): Promise<BankMovementRow[]>
@@ -60,6 +63,16 @@ export interface DataService {
   createBankMovement(input: BankMovementInput, file?: File | null): Promise<BankMovementRow>
   updateBankMovement(id: string, input: BankMovementInput): Promise<BankMovementRow>
   addBankDocument(movementId: string, file: File): Promise<BankDocument>
+  deleteBankDocument(docId: string): Promise<DeleteSummary>
+
+  getInvoiceAlerts(): Promise<InvoiceAlert[]>
+
+  getPersonalMovements(filters?: PersonalFilters): Promise<PersonalMovementRow[]>
+  createPersonalMovement(input: PersonalMovementInput, files?: File[]): Promise<PersonalMovementRow>
+  updatePersonalMovement(id: string, input: PersonalMovementInput): Promise<PersonalMovementRow>
+  deletePersonalMovement(id: string): Promise<DeleteSummary>
+  addPersonalDocument(movementId: string, file: File): Promise<PersonalDocument>
+  deletePersonalDocument(docId: string): Promise<DeleteSummary>
 
   getDashboardStats(): Promise<DashboardStats>
   getServiceReports(filters: OperationFilters): Promise<ServiceReport>

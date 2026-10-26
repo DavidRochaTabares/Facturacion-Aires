@@ -12,6 +12,7 @@ const nights = (a: string, b: string) => { const n = Math.round((Date.parse(b) -
  */
 export function requestToInitial(r: ClientRequestFull, type: 'flight' | 'hotel'): Partial<OperationInput> {
   const d = r.details
+  const passengers = r.passengers.filter(p => !p.item_id) // only the main request's passengers; item passengers belong to their own requirement
   const note = [r.description, r.observations, d.itinerary_notes && `Itinerario: ${d.itinerary_notes}`, d.preferences && `Preferencias: ${d.preferences}`].filter(Boolean).join('\n')
   if (type === 'flight') {
     const base = emptyDetails('flight')
@@ -23,15 +24,15 @@ export function requestToInitial(r: ClientRequestFull, type: 'flight' | 'hotel')
         route: [d.origin, d.destination].filter(Boolean).join('-'),
         departure_date: dep, return_date: ret,
         segments: [{ id: uid(), flight_number: '', origin: String(d.origin ?? ''), destination: String(d.destination ?? ''), departure_date: dep, departure_time: '', arrival_date: ret, arrival_time: '', cabin: 'Economy' }],
-        passengers: r.passengers.length
-          ? r.passengers.map(p => ({ id: uid(), names: p.first_names, surnames: p.last_names, document_type: p.document_type === 'RC' ? 'TI' : p.document_type, document_number: p.document_number, birth_date: p.birth_date, email: '', phone: '', frequent_flyer: '', ticket_number: '' }))
+        passengers: passengers.length
+          ? passengers.map(p => ({ id: uid(), names: p.first_names, surnames: p.last_names, document_type: p.document_type === 'RC' ? 'TI' : p.document_type, document_number: p.document_number, birth_date: p.birth_date, email: '', phone: '', frequent_flyer: '', ticket_number: '' }))
           : base.passengers,
       },
     } as Partial<OperationInput>
   }
   const base = emptyDetails('hotel')
   const cin = String(d.check_in ?? ''), cout = String(d.check_out ?? '')
-  const p0 = r.passengers[0]
+  const p0 = passengers[0]
   return {
     observations: note,
     details: { ...base, city: String(d.destination ?? ''), check_in: cin, check_out: cout, nights: cin && cout ? nights(cin, cout) : null, guests: d.guests ? Number(d.guests) : null, holder: p0 ? `${p0.first_names} ${p0.last_names}` : r.client_name },

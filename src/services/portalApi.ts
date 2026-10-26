@@ -44,6 +44,18 @@ export const portalApi = {
     for (const [k, v] of Object.entries(files)) f.append(k, v, v.name)
     return call<{ ok: true; changed: boolean }>(token, f)
   },
+  addItem(token: string, payload: unknown, files: Record<string, File>) {
+    const f = new FormData()
+    f.append('action', 'add_item'); f.append('payload', JSON.stringify(payload))
+    for (const [k, v] of Object.entries(files)) f.append(k, v, v.name)
+    return call<{ ok: true; id: string }>(token, f)
+  },
+  updateItem(token: string, itemId: string, payload: unknown, files: Record<string, File>) {
+    const f = new FormData()
+    f.append('action', 'update_item'); f.append('item_id', itemId); f.append('payload', JSON.stringify(payload))
+    for (const [k, v] of Object.entries(files)) f.append(k, v, v.name)
+    return call<{ ok: true; id: string }>(token, f)
+  },
   message(token: string, body: string, files: File[]) {
     const f = new FormData()
     f.append('action', 'message'); f.append('body', body)

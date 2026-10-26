@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
 import { refreshAll, useAppUpdate, useAsync, useAuth, useTheme } from '../hooks'
+import { dataService } from '../services'
 import { requestsService } from '../services/requests'
 import { CalculatorPanel } from './CalculatorPanel'
 import { AgencyLogo, Loading, MobileLogo, PoweredBy, ThemeSwitch } from './ui'
@@ -19,11 +20,26 @@ export function ProtectedLayout() {
   const [calcOpen, setCalcOpen] = useState(false)
   // Number of conversations with unread client messages (cheap head-count query; checked every minute while the tab is visible)
   const unread = useAsync(() => requestsService.unreadTotal().catch(() => 0), [])
+  // Sidebar badges: incomplete flights/loans and invoice alerts already due.
+  const counts = useAsync(async () => {
+    const today = new Date().toISOString().slice(0, 10)
+    const [f, l, a] = await Promise.all([
+      dataService.getOperations({ type: 'flight', incomplete: true }).catch(() => []),
+      dataService.getOperations({ type: 'loan', incomplete: true }).catch(() => []),
+      dataService.getInvoiceAlerts().catch(() => []),
+    ])
+    return { flight: f.length, loan: l.length, alerts: a.filter(x => x.due_date <= today).length }
+  }, [])
   useEffect(() => {
-    const t = setInterval(() => { if (document.visibilityState === 'visible') unread.reload() }, 60_000)
+    const t = setInterval(() => { if (document.visibilityState === 'visible') { unread.reload(); counts.reload() } }, 60_000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  const badge = (to: string) =>
+    to === '/solicitudes' ? (unread.data ?? 0)
+    : to === '/vuelos' ? (counts.data?.flight ?? 0)
+    : to === '/prestamos' ? (counts.data?.loan ?? 0)
+    : to === '/movimientos-bancarios' ? (counts.data?.alerts ?? 0) : 0
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMsg, setRefreshMsg] = useState('')
   const update = useAppUpdate()
@@ -55,7 +71,7 @@ export function ProtectedLayout() {
           {groups.map(g => (
             <div key={g.title}>
               <p className="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.title}</p>
-              {g.items.map(i => <NavLink key={i.to} to={i.to} className={link}><i.icon size={18} />{i.label}{i.to === '/solicitudes' && (unread.data ?? 0) > 0 && <span aria-label={`${unread.data} sin leer`} className="ml-auto rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white dark:text-slate-900">{unread.data}</span>}</NavLink>)}
+              {g.items.map(i => <NavLink key={i.to} to={i.to} className={link}><i.icon size={18} />{i.label}{badge(i.to) > 0 && <span aria-label={`${badge(i.to)} pendientes`} className={`ml-auto rounded-full px-1.5 text-[11px] font-semibold ${i.to === '/solicitudes' ? 'bg-brand text-white dark:text-slate-900' : 'bg-amber-500 text-white dark:text-slate-900'}`}>{badge(i.to)}</span>}</NavLink>)}
             </div>
           ))}
           <div>

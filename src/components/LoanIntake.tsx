@@ -56,7 +56,7 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
     }
   }
   const reset = () => { setFile(null); setUrl(null); setEx(null); setStage('idle') }
-  const save = async (v: OperationInput) => { setBusy(true); await dataService.createOperation(v, file); nav(path) }
+  const save = async (v: OperationInput, docs?: { file: File; category: 'ticket' | 'payment' | 'supplier_invoice' | 'agency_invoice' | 'other' }[]) => { setBusy(true); await dataService.createOperation(v, docs ?? (file ? [{ file, category: 'payment' as const }] : [])); nav(path) }
 
   const exLoan = ex as ExtractedLoan | null
   const det = (ex?.details ?? {}) as Record<string, any>
@@ -91,7 +91,7 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
   if (stage === 'manual') return (
     <>
       <PageHeader title={title} actions={<button className="btn-ghost" onClick={reset}>Adjuntar documento</button>} />
-      <div className="card p-5 max-w-4xl mx-auto"><ServiceForm type={kind} busy={busy} onCancel={onBack} onSubmit={save} /></div>
+      <div className="card p-5 max-w-4xl mx-auto"><ServiceForm type={kind} busy={busy} onCancel={onBack} onSubmit={(v, docs) => save(v, docs)} /></div>
     </>
   )
 
@@ -113,7 +113,8 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">Datos detectados</p>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">{detected.map(([k, v]) => <div key={k} className="flex gap-2"><dt className="text-muted">{k}:</dt><dd className="truncate">{v}</dd></div>)}</dl>
               </div>
-              <ServiceForm key={`${kind}-extracted`} type={kind} initial={initial} busy={busy} onCancel={reset} onSubmit={save} />
+              <ServiceForm key={`${kind}-extracted`} type={kind} initial={initial} busy={busy} onCancel={reset} onSubmit={(v, docs) => save(v, docs)}
+                initialDocs={file ? [{ file, category: kind === 'loan' ? 'payment' : 'other' }] : []} />
             </>
           )}
         </div>

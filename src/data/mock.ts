@@ -35,7 +35,7 @@ const op = (id: string, company_id: string, type: OperationType, date: string, o
   db.operations.push({ id, company_id, type, date, provider: '', invoice_number: '', amount: 0, charge_amount: 0, observations: '', group_id: null, created_at: date, ...o })
 }
 const doc = (operation_id: string, name: string, size: number, date: string, mime_type = 'application/pdf', folder = 'emisiones') =>
-  db.documents.push({ id: `d-${operation_id}-${db.documents.length}`, operation_id, name, mime_type, size, storage_path: `${folder}/${operation_id}/${name}`, created_at: date })
+  db.documents.push({ id: `d-${operation_id}-${db.documents.length}`, operation_id, name, mime_type, size, storage_path: `${folder}/${operation_id}/${name}`, category: 'other', created_at: date })
 
 type Seg = [string, string, string, string, string, string, string, string?]
 function flight(id: string, company_id: string, date: string, o: {
