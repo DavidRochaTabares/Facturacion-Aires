@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Lock, Moon, Paperclip, Pencil, Plus, Send, Sun } from 'lucide-react'
+import { ArrowLeft, Lock, MessageCircle, Moon, Paperclip, Pencil, Plus, Send, Sun } from 'lucide-react'
 import spineDay from '../../assets/spinedev-day.png'
 import spineNight from '../../assets/spinedev-night.png'
 import { AttachmentCard, forgetPreview, PendingFiles, type UrlResolver } from '../../components/AttachmentPreview'
@@ -77,6 +77,9 @@ export default function PublicRequest() {
   const [data, setData] = useState<PortalData | null>(null)
   const [state, setState] = useState<'loading' | 'invalid' | 'error' | 'ready'>(TOKEN_RE.test(token) ? 'loading' : 'invalid')
   const [loadError, setLoadError] = useState('')
+  // Chat-first: the client can open the conversation before (or without ever) submitting the form.
+  const [chat, setChat] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
 
   const load = useCallback(async (quiet = false) => {
     if (!TOKEN_RE.test(token)) return
@@ -92,24 +95,41 @@ export default function PublicRequest() {
     load()
   }, [load])
 
-  // Moderate polling, only while the page is visible and the form was already submitted.
+  // Moderate polling, only while the page is visible and the conversation is (or can be) open.
   const submitted = !!data?.request.submitted_at
+  const live = submitted || chat
   useEffect(() => {
-    if (!submitted) return
+    if (!live) return
     const tick = () => { if (document.visibilityState === 'visible') load(true) }
     const t = setInterval(tick, POLL_MS)
     document.addEventListener('visibilitychange', tick)
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', tick) }
-  }, [submitted, load])
+  }, [live, load])
 
   if (state === 'loading') return <Shell><div className="flex justify-center py-24 text-muted"><Spinner /></div></Shell>
   if (state === 'invalid') return <Notice title="Enlace no válido" text="Este enlace no es válido o ha sido desactivado. Contacta a la agencia para recibir uno nuevo." />
   if (state === 'error' || !data) return <Shell><div className="card p-8 text-center"><p className="text-sm text-red-500" role="alert">{loadError}</p><button className="btn-primary mt-4" onClick={() => { setState('loading'); load() }}>Reintentar</button></div></Shell>
-  if (!data.request.submitted_at) return <Shell><PortalForm token={token} initial={data.request} onDone={() => load()} /></Shell>
+  if (!submitted) return (
+    <Shell fill={chat}>
+      {/* The form stays mounted once opened (hidden, not unmounted): nothing the client typed is lost. */}
+      {!chat && (
+        <section className="card portal-fade flex flex-col items-center gap-3 p-5 text-center sm:p-7" aria-label="Elegir cómo continuar">
+          <h1 className="text-xl font-semibold tracking-tight">{data.request.client_name.trim() ? `Hola, ${data.request.client_name.trim().split(' ')[0]}` : 'Hola'}</h1>
+          <p className="max-w-md text-sm text-muted">Elige cómo quieres hacer tu solicitud: hablando con la agencia por chat o diligenciando tus datos en el formulario.</p>
+          <div className="mt-1 flex w-full max-w-sm flex-col gap-2">
+            <button type="button" className="btn-primary w-full" onClick={() => setChat(true)}><MessageCircle size={16} />Hablar con la agencia por chat</button>
+            <button type="button" className="btn-primary w-full" onClick={() => setFormOpen(o => !o)}><Pencil size={14} />{formOpen ? 'Ocultar el formulario' : 'Hacer mi solicitud con el formulario'}</button>
+          </div>
+        </section>
+      )}
+      {formOpen && <div className={chat ? 'hidden' : 'mt-4'}><PortalForm token={token} initial={data.request} onDone={() => { setChat(true); load() }} /></div>}
+      {chat && <Conversation token={token} data={data} reload={load} onBack={() => setChat(false)} />}
+    </Shell>
+  )
   return <Shell fill><Conversation token={token} data={data} reload={load} /></Shell>
 }
 
-function Conversation({ token, data, reload }: { token: string; data: PortalData; reload: (quiet?: boolean) => Promise<void> }) {
+function Conversation({ token, data, reload, onBack }: { token: string; data: PortalData; reload: (quiet?: boolean) => Promise<void>; onBack?: () => void }) {
   const { request: r, passengers, attachments, items = [], messages } = data
   const closed = r.status === 'closed'
   const [text, setText] = useState('')
@@ -176,7 +196,7 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
   const summary: [string, string][] = [['Tipo', typeLabel(r.request_type)], ['Enviada', when(r.submitted_at ?? r.created_at)], ...factsOf(r.details)]
   const general = attachments.filter(a => a.kind === 'supporting')
 
-  if (form === 'main') return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={r} existing={passengers} mode="update" onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
+  if (form === 'main') return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={r} existing={passengers} mode={r.submitted_at ? 'update' : 'create'} onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
   if (form === 'add') return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={EMPTY_ITEM} mode="add" onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
   if (form) return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={form} existing={form.passengers} mode="edit-item" itemId={form.id} onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
 
@@ -184,13 +204,17 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <section className="card portal-fade max-h-[38dvh] shrink-0 overflow-y-auto p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-lg font-semibold">Tu solicitud</h1>
+          <h1 className="flex items-center gap-2 text-lg font-semibold">
+            {onBack && <button type="button" onClick={onBack} aria-label="Volver al formulario" title="Volver al formulario" className="grid h-7 w-7 place-items-center rounded-full border border-line text-muted transition hover:text-brand"><ArrowLeft size={14} /></button>}
+            Tu solicitud
+          </h1>
           <div className="flex items-center gap-2">
-            {!closed && <button type="button" className="btn-ghost !py-1 text-xs" onClick={() => setForm('main')}><Pencil size={12} />Actualizar solicitud</button>}
+            {!closed && <button type="button" className="btn-ghost !py-1 text-xs" onClick={() => setForm('main')}><Pencil size={12} />{r.submitted_at ? 'Actualizar solicitud' : 'Completar formulario'}</button>}
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${closed ? 'bg-slate-500/10 text-muted' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'}`}>{closed ? 'Cerrada' : 'Abierta'}</span>
           </div>
         </div>
-        <details className="mt-2" open={messages.length === 0}>
+        {!r.submitted_at && <p className="mt-2 text-sm text-muted">Aún no has enviado el formulario. Puedes conversar libremente abajo o completarlo cuando quieras con el botón «Completar formulario».</p>}
+        {r.submitted_at && <details className="mt-2" open={messages.length === 0}>
           <summary className="cursor-pointer text-sm font-medium text-brand">Ver datos de la solicitud</summary>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">{summary.map(([k, v]) => <div key={k}><dt className="text-xs text-muted">{k}</dt><dd className="break-words">{v}</dd></div>)}</dl>
           {r.description && <p className="mt-3 whitespace-pre-wrap text-sm">{r.description}</p>}
@@ -204,7 +228,7 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
                 </li>))}</ul></div>
           )}
           {general.length > 0 && <div className="mt-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted">Archivos complementarios</p><AttachmentList items={general} resolve={resolve} /></div>}
-        </details>
+        </details>}
       </section>
 
       <section className="card portal-fade max-h-[30dvh] shrink-0 overflow-y-auto p-4 sm:p-5" aria-label="Requerimientos">
@@ -239,7 +263,7 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
         <h2 className="mb-2 shrink-0 text-sm font-semibold">Conversación con la agencia</h2>
         <div ref={list} onScroll={trackScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1" aria-live="polite">
           <div ref={content} className="space-y-3">
-            {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">{r.client_name.trim() ? `Hola, ${r.client_name.trim().split(' ')[0]}. ` : ''}Tu solicitud fue enviada. La agencia te responderá aquí.</p>}
+            {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">{r.client_name.trim() ? `Hola, ${r.client_name.trim().split(' ')[0]}. ` : 'Hola. '}{r.submitted_at ? 'Tu solicitud fue enviada. La agencia te responderá aquí.' : 'Escríbenos lo que necesitas: la agencia te responderá en este mismo chat.'}</p>}
             {messages.map(m => (
               <div key={m.id} className={`flex ${m.author === 'client' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.author === 'client' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
@@ -266,6 +290,7 @@ function Conversation({ token, data, reload }: { token: string; data: PortalData
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-brand disabled:opacity-40"><Paperclip size={20} /></button>
               <input ref={input} type="file" multiple className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onChange={e => { pick(e.target.files); e.target.value = '' }} />
               <textarea ref={area} rows={1} placeholder="Escribe tu mensaje…" value={text} maxLength={5000} onChange={e => setText(e.target.value)} aria-label="Mensaje"
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }}
                 className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-5 text-fg outline-none placeholder:text-muted" />
               <button type="submit" disabled={busy || (!text.trim() && !files.length)} aria-label={busy ? 'Enviando…' : 'Enviar mensaje'} title="Enviar"
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white shadow-sm transition hover:opacity-90 disabled:opacity-40 dark:text-slate-900">{busy ? <Spinner /> : <Send size={18} />}</button>

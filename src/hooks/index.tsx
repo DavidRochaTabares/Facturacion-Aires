@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { onRefresh, refreshAll, trackEnd, trackStart } from '../lib/refresh'
 import { authService } from '../services'
 import type { AuthSession } from '../types'
 
@@ -31,29 +32,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeContext.Provider value={{ theme, toggle: () => setTheme(t => (t === 'dark' ? 'light' : 'dark')) }}>{children}</ThemeContext.Provider>
 }
 
-const refreshListeners = new Set<() => void>()
-const idleWaiters = new Set<() => void>()
-let pending = 0
-let quietFailures = 0
-
-/**
- * Silently re-runs every mounted useAsync query (current data stays on screen until the new data arrives, so nothing flickers or is duplicated;
- * forms keep their own state). Resolves when all queries settled (or after maxMs); false if any of them failed.
- */
-export async function refreshAll(maxMs = 15000): Promise<boolean> {
-  quietFailures = 0
-  refreshListeners.forEach(l => l())
-  await new Promise<void>(r => setTimeout(r, 60))
-  if (pending > 0) {
-    await new Promise<void>(resolve => {
-      let t: ReturnType<typeof setTimeout>
-      const done = () => { clearTimeout(t); idleWaiters.delete(done); resolve() }
-      t = setTimeout(done, maxMs)
-      idleWaiters.add(done)
-    })
-  }
-  return quietFailures === 0
-}
+export { refreshAll }
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null)
@@ -61,26 +40,23 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [tick, setTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const quiet = useRef(false)
-  useEffect(() => {
-    const l = () => { quiet.current = true; setTick(t => t + 1) }
-    refreshListeners.add(l)
-    return () => { refreshListeners.delete(l) }
-  }, [])
+  useEffect(() => onRefresh(() => { quiet.current = true; setTick(t => t + 1) }), [])
   useEffect(() => {
     let alive = true
     const silent = quiet.current
     quiet.current = false
     if (!silent) setLoading(true)
     setError(null)
-    pending++
+    let failed = false
+    trackStart()
     fn().then(d => { if (alive) { setData(d); setLoading(false) } })
       .catch(e => {
         if (!alive) return
-        if (silent) quietFailures++
-        else { setError(e instanceof Error ? e.message : 'Error inesperado'); setLoading(false) }
+        failed = silent
         if (silent) setLoading(false)
+        else { setError(e instanceof Error ? e.message : 'Error inesperado'); setLoading(false) }
       })
-      .finally(() => { pending--; if (pending <= 0) { pending = 0; [...idleWaiters].forEach(f => f()) } })
+      .finally(() => trackEnd(failed))
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick])

@@ -89,48 +89,29 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
     setExtras(next); setErrors(bad)
   }
 
-  /** Returns [fieldKey, message] pairs; the key is used to highlight the field itself. */
+  /** No field is required: only malformed values the client actually typed are flagged (format and date order). */
   const validate = (): [string, string][] => {
     const e: [string, string][] = []
     const push = (k: string, m: string) => e.push([k, m])
-    if (!type) return [['type', 'Selecciona qué necesitas (tipo de requerimiento).']]
     if (create) {
-      if (name.trim().length < 3) push('name', 'Escribe tu nombre completo.')
-      if (!email.trim() && !phone.trim()) push('email', 'Escribe un correo electrónico o un teléfono de contacto.')
       if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) push('email', 'El correo electrónico no es válido.')
       if (phone.trim() && !/^\+?[0-9 ()-]{7,20}$/.test(phone.trim())) push('phone', 'El teléfono no es válido.')
     }
-    if (!['flight', 'hotel'].includes(type) && description.trim().length < 10) push('description', 'Describe con más detalle lo que necesitas (mínimo 10 caracteres).')
-    const req = (k: string, label: string, min = 2) => { if ((d[k] ?? '').trim().length < min) push(k, label) }
-    const date = (k: string, label: string) => { if (!d[k]) push(k, `Selecciona ${label}.`); else if (d[k] < today()) push(k, `${label[0].toUpperCase()}${label.slice(1)} no puede estar en el pasado.`) }
     if (type === 'flight') {
-      req('origin', 'Indica el origen del vuelo.'); req('destination', 'Indica el destino del vuelo.'); date('departure_date', 'la fecha de salida')
-      if (d.scope === 'international' && !d.return_date) push('return_date', 'Selecciona la fecha de regreso (obligatoria en vuelos internacionales).')
       if (d.return_date && d.departure_date && d.return_date < d.departure_date) push('return_date', 'La fecha de regreso no puede ser anterior a la de salida.')
     } else if (type === 'hotel') {
-      req('destination', 'Indica el destino o la ubicación del hotel.'); date('check_in', 'la fecha de entrada')
-      if (!d.check_out) push('check_out', 'Selecciona la fecha de salida.'); else if (d.check_in && d.check_out <= d.check_in) push('check_out', 'La fecha de salida debe ser posterior a la de entrada.')
-      if (!(Number(d.guests) >= 1)) push('guests', 'Indica el número de huéspedes.')
+      if (d.check_in && d.check_out && d.check_out <= d.check_in) push('check_out', 'La fecha de salida debe ser posterior a la de entrada.')
+      if (d.guests && !(Number(d.guests) >= 1)) push('guests', 'El número de huéspedes no es válido.')
     } else if (type === 'transport') {
-      req('origin', 'Indica el origen del servicio de transporte.'); req('destination', 'Indica el destino del servicio de transporte.'); date('service_date', 'la fecha del servicio')
       if (d.return_date && d.service_date && d.return_date < d.service_date) push('return_date', 'La fecha de regreso no puede ser anterior a la del servicio.')
     } else if (type === 'food') {
-      req('location', 'Indica la ubicación donde se necesita el servicio de alimentación.', 3); date('service_date', 'la fecha del servicio')
-      if (!(Number(d.people) >= 1)) push('people', 'Indica la cantidad de personas.')
+      if (d.people && !(Number(d.people) >= 1)) push('people', 'La cantidad de personas no es válida.')
     } else if (type === 'package') {
-      req('destination', 'Indica el destino del paquete turístico.'); date('date_from', 'la fecha de inicio')
-      if (!d.date_to) push('date_to', 'Selecciona la fecha de finalización.'); else if (d.date_from && d.date_to < d.date_from) push('date_to', 'La fecha de finalización no puede ser anterior a la de inicio.')
+      if (d.date_from && d.date_to && d.date_to < d.date_from) push('date_to', 'La fecha de finalización no puede ser anterior a la de inicio.')
     }
-    if (need && !existing.length && !livePax.length) push('pax', 'Agrega al menos un pasajero.')
     livePax.forEach((p, i) => {
-      const w = `Pasajero ${existing.length + i + 1}`
-      if (p.first_names.trim().length < 2) push(`p${i}_first_names`, `${w}: escribe los nombres.`)
-      if (p.last_names.trim().length < 2) push(`p${i}_last_names`, `${w}: escribe los apellidos.`)
-      if (!/^[A-Za-z0-9.-]{4,30}$/.test(p.document_number.trim())) push(`p${i}_document_number`, `${w}: el número de documento no es válido.`)
-      if (!p.birth_date) push(`p${i}_birth_date`, `${w}: selecciona la fecha de nacimiento.`)
-      if (need && !p.file) push(`p${i}_file`, `Falta el documento de identidad de ${p.first_names.trim() ? `${p.first_names.trim()} ${p.last_names.trim()}`.trim() : w} (${w.toLowerCase()}).`)
+      if (p.document_number.trim() && !/^[A-Za-z0-9.-]{4,30}$/.test(p.document_number.trim())) push(`p${i}_document_number`, `Pasajero ${existing.length + i + 1}: el número de documento no es válido.`)
     })
-    if (create && !accepted) push('privacy', 'Debes aceptar el aviso de privacidad para enviar la solicitud.')
     return e
   }
 
@@ -151,7 +132,7 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
       if (mode === 'add') await portalApi.addItem(token, payload, files)
       else if (mode === 'edit-item') await portalApi.updateItem(token, itemId!, payload, files)
       else if (update) await portalApi.update(token, payload, files)
-      else await portalApi.submit(token, { client_name: name, client_email: email, client_phone: phone, ...payload, privacy_accepted: true }, files)
+      else await portalApi.submit(token, { client_name: name, client_email: email, client_phone: phone, ...payload, privacy_accepted: accepted }, files)
       onDone()
     } catch (err) {
       const pe = err as PortalError
@@ -162,7 +143,7 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
 
   const grid = 'grid gap-3 sm:grid-cols-2'
   const changed = update && type && initial.request_type && type !== initial.request_type
-  const descLabel = !type ? '' : ['flight', 'hotel'].includes(type) ? 'Descripción de lo que necesitas (opcional)' : type === 'other' ? 'Cuéntanos qué necesitas *' : type === 'transport' ? 'Detalles del servicio *' : type === 'food' ? 'Descripción del requerimiento *' : 'Descripción detallada *'
+  const descLabel = !type ? 'Cuéntanos qué necesitas (opcional)' : ['flight', 'hotel'].includes(type) ? 'Descripción de lo que necesitas (opcional)' : type === 'other' ? 'Cuéntanos qué necesitas' : type === 'transport' ? 'Detalles del servicio' : type === 'food' ? 'Descripción del requerimiento' : 'Descripción detallada'
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
@@ -171,7 +152,7 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
           <h1 className="text-xl font-semibold tracking-tight">{mode === 'add' ? 'Agregar otro requerimiento' : update ? 'Actualizar mi solicitud' : 'Solicitud de servicio'}</h1>
           <p className="mt-1 text-sm text-muted">{mode === 'add' ? 'Puedes registrar varios servicios en esta misma conversación: cada uno guarda sus propios datos, pasajeros y archivos.'
             : update ? 'Cambia lo que necesites. Se conservan tus mensajes, documentos y datos anteriores.'
-            : `${name.trim() ? `Hola, ${name.trim().split(' ')[0]}. ` : ''}Cuéntanos qué necesitas. Cuando envíes la solicitud podrás conversar con la agencia desde esta misma página.`}</p>
+            : `${name.trim() ? `Hola, ${name.trim().split(' ')[0]}. ` : ''}Cuéntanos qué necesitas. Todos los campos son opcionales: diligencia solo lo que tengas y guarda cuando quieras.`}</p>
         </div>
         {errors.length > 0 && (
           <div role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">
@@ -183,15 +164,15 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
         {create && (<>
           <H>Tus datos</H>
           <div className={grid}>
-            <TextInput className="sm:col-span-2" label="Nombre completo *" value={name} error={err('name')} onChange={e => { setName(e.target.value); clearBad('name') }} autoComplete="name" />
+            <TextInput className="sm:col-span-2" label="Nombre completo" value={name} error={err('name')} onChange={e => { setName(e.target.value); clearBad('name') }} autoComplete="name" />
             <TextInput label="Correo electrónico" type="email" value={email} error={err('email')} onChange={e => { setEmail(e.target.value); clearBad('email') }} autoComplete="email" />
             <TextInput label="Teléfono / WhatsApp" type="tel" value={phone} error={err('phone')} onChange={e => { setPhone(e.target.value); clearBad('phone') }} autoComplete="tel" />
           </div>
-          <p className="text-xs text-muted">Indica al menos un correo o un teléfono.</p>
+          <p className="text-xs text-muted">Si quieres, déjanos un correo o un teléfono para contactarte.</p>
         </>)}
 
         <H>¿Qué necesitas?</H>
-        <Select label="Tipo de requerimiento *" value={type} error={err('type')} onChange={e => { changeType(e.target.value as RequestType | ''); clearBad('type') }}>
+        <Select label="Tipo de requerimiento" value={type} error={err('type')} onChange={e => { changeType(e.target.value as RequestType | ''); clearBad('type') }}>
           <option value="">Selecciona una opción…</option>
           {(Object.keys(REQUEST_TYPE_LABEL) as RequestType[]).map(t => <option key={t} value={t}>{REQUEST_TYPE_LABEL[t]}</option>)}
         </Select>
@@ -199,48 +180,48 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
 
         {type === 'flight' && (
           <div className={grid}>
-            <TextInput label="Origen *" error={err('origin')} {...dv('origin')} />
-            <TextInput label="Destino *" error={err('destination')} {...dv('destination')} />
-            <Select label="Tipo de viaje *" {...dvFlight('scope')}><option value="national">Nacional</option><option value="international">Internacional</option></Select>
-            <Select label="Trayecto *" {...dvFlight('trip_type')}><option value="oneway">Solo ida</option><option value="roundtrip">Ida y vuelta</option></Select>
-            <TextInput label="Fecha de salida *" type="date" min={today()} error={err('departure_date')} {...dv('departure_date')} />
-            {(d.scope === 'international' || d.trip_type === 'roundtrip') && <TextInput label={d.scope === 'international' ? 'Fecha de regreso *' : 'Fecha de regreso (opcional)'} type="date" min={d.departure_date || today()} error={err('return_date')} {...dv('return_date')} />}
+            <TextInput label="Origen" error={err('origin')} {...dv('origin')} />
+            <TextInput label="Destino" error={err('destination')} {...dv('destination')} />
+            <Select label="Tipo de viaje" {...dvFlight('scope')}><option value="national">Nacional</option><option value="international">Internacional</option></Select>
+            <Select label="Trayecto" {...dvFlight('trip_type')}><option value="oneway">Solo ida</option><option value="roundtrip">Ida y vuelta</option></Select>
+            <TextInput label="Fecha de salida" type="date" error={err('departure_date')} {...dv('departure_date')} />
+            {(d.scope === 'international' || d.trip_type === 'roundtrip') && <TextInput label={d.scope === 'international' ? 'Fecha de regreso (vuelo internacional)' : 'Fecha de regreso (opcional)'} type="date" error={err('return_date')} {...dv('return_date')} />}
             <TextInput className="sm:col-span-2" label="Preferencias u observaciones del itinerario" {...dv('itinerary_notes')} />
             <p className="text-sm text-muted sm:col-span-2">Número de pasajeros: <b className="text-fg">{existing.length + livePax.length || '—'}</b> (según los pasajeros que agregues abajo)</p>
           </div>
         )}
         {type === 'hotel' && (
           <div className={grid}>
-            <TextInput className="sm:col-span-2" label="Destino o ubicación *" error={err('destination')} {...dv('destination')} />
-            <TextInput label="Fecha de entrada *" type="date" min={today()} error={err('check_in')} {...dv('check_in')} />
-            <TextInput label="Fecha de salida *" type="date" min={d.check_in || today()} error={err('check_out')} {...dv('check_out')} />
-            <TextInput label="Número de huéspedes *" type="number" min={1} max={50} error={err('guests')} {...dv('guests')} />
+            <TextInput className="sm:col-span-2" label="Destino o ubicación" error={err('destination')} {...dv('destination')} />
+            <TextInput label="Fecha de entrada" type="date" error={err('check_in')} {...dv('check_in')} />
+            <TextInput label="Fecha de salida" type="date" error={err('check_out')} {...dv('check_out')} />
+            <TextInput label="Número de huéspedes" type="number" min={1} max={50} error={err('guests')} {...dv('guests')} />
             <TextInput label="Número de habitaciones" type="number" min={1} max={30} {...dv('rooms')} />
             <TextInput className="sm:col-span-2" label="Observaciones y preferencias" {...dv('preferences')} />
           </div>
         )}
         {type === 'transport' && (
           <div className={grid}>
-            <TextInput label="Origen *" error={err('origin')} {...dv('origin')} />
-            <TextInput label="Destino *" error={err('destination')} {...dv('destination')} />
-            <TextInput label="Fecha del servicio *" type="date" min={today()} error={err('service_date')} {...dv('service_date')} />
+            <TextInput label="Origen" error={err('origin')} {...dv('origin')} />
+            <TextInput label="Destino" error={err('destination')} {...dv('destination')} />
+            <TextInput label="Fecha del servicio" type="date" error={err('service_date')} {...dv('service_date')} />
             <TextInput label="Hora" type="time" {...dv('time')} />
-            <TextInput label="Fecha de regreso (opcional)" type="date" min={d.service_date || today()} error={err('return_date')} {...dv('return_date')} />
+            <TextInput label="Fecha de regreso (opcional)" type="date" error={err('return_date')} {...dv('return_date')} />
             <TextInput label="Cantidad de personas" type="number" min={1} max={500} {...dv('people')} />
           </div>
         )}
         {type === 'food' && (
           <div className={grid}>
-            <TextInput label="Fecha del servicio *" type="date" min={today()} error={err('service_date')} {...dv('service_date')} />
-            <TextInput label="Cantidad de personas *" type="number" min={1} max={5000} error={err('people')} {...dv('people')} />
-            <TextInput className="sm:col-span-2" label="Ubicación *" placeholder="Ciudad y lugar donde se necesita" error={err('location')} {...dv('location')} />
+            <TextInput label="Fecha del servicio" type="date" error={err('service_date')} {...dv('service_date')} />
+            <TextInput label="Cantidad de personas" type="number" min={1} max={5000} error={err('people')} {...dv('people')} />
+            <TextInput className="sm:col-span-2" label="Ubicación" placeholder="Ciudad y lugar donde se necesita" error={err('location')} {...dv('location')} />
           </div>
         )}
         {type === 'package' && (
           <div className={grid}>
-            <TextInput className="sm:col-span-2" label="Destino *" error={err('destination')} {...dv('destination')} />
-            <TextInput label="Fecha de inicio *" type="date" min={today()} error={err('date_from')} {...dv('date_from')} />
-            <TextInput label="Fecha de finalización *" type="date" min={d.date_from || today()} error={err('date_to')} {...dv('date_to')} />
+            <TextInput className="sm:col-span-2" label="Destino" error={err('destination')} {...dv('destination')} />
+            <TextInput label="Fecha de inicio" type="date" error={err('date_from')} {...dv('date_from')} />
+            <TextInput label="Fecha de finalización" type="date" error={err('date_to')} {...dv('date_to')} />
             <TextInput className="sm:col-span-2" label="Preferencias" {...dv('preferences')} />
           </div>
         )}
@@ -251,12 +232,10 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
           </div>
         )}
 
-        {type && <>
-          <Field label={descLabel} error={err('description')}><textarea className={`input min-h-24 ${err('description') ? '!border-red-500' : ''}`} value={description} maxLength={4000} onChange={e => { setDescription(e.target.value); clearBad('description') }} /></Field>
-          <Field label="Observaciones adicionales"><textarea className="input min-h-16" value={observations} maxLength={4000} onChange={e => setObservations(e.target.value)} /></Field>
-        </>}
+        <Field label={descLabel} error={err('description')}><textarea className={`input min-h-24 ${err('description') ? '!border-red-500' : ''}`} value={description} maxLength={4000} onChange={e => { setDescription(e.target.value); clearBad('description') }} /></Field>
+        <Field label="Observaciones adicionales"><textarea className="input min-h-16" value={observations} maxLength={4000} onChange={e => setObservations(e.target.value)} /></Field>
 
-        {type && usePax && <H>{need ? 'Pasajeros *' : 'Pasajeros (opcional)'}</H>}
+        {type && usePax && <H>'Pasajeros'</H>}
         {type && usePax && err('pax') && <p role="alert" className="text-sm text-red-500">{err('pax')}</p>}
         {type && usePax && existing.length > 0 && (
           <p className="text-sm text-muted">Ya registrados: <b className="text-fg">{existing.map(p => `${p.first_names} ${p.last_names}`).join(', ')}</b>. Aquí solo agregas pasajeros nuevos.</p>
@@ -266,12 +245,12 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
             <p className="text-sm font-medium">Pasajero {existing.length + i + 1}</p>
             {(!need || existing.length + pax.length > 1) && <button type="button" onClick={() => setPax(x => x.filter((_, j) => j !== i))} className="absolute right-2 top-2 text-muted hover:text-red-500" aria-label={`Quitar pasajero ${existing.length + i + 1}`}><Trash2 size={14} /></button>}
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextInput label="Nombres *" value={p.first_names} error={err(`p${i}_first_names`)} onChange={e => setPaxField(i, 'first_names', e.target.value)} autoComplete="off" />
-              <TextInput label="Apellidos *" value={p.last_names} error={err(`p${i}_last_names`)} onChange={e => setPaxField(i, 'last_names', e.target.value)} autoComplete="off" />
-              <Select label="Tipo de documento *" value={p.document_type} onChange={e => setPaxField(i, 'document_type', e.target.value)}>{DOC_TYPES.map(t => <option key={t}>{t}</option>)}</Select>
-              <TextInput label="Número de documento *" value={p.document_number} error={err(`p${i}_document_number`)} onChange={e => setPaxField(i, 'document_number', e.target.value)} autoComplete="off" />
-              <TextInput label="Fecha de nacimiento *" type="date" max={today()} value={p.birth_date} error={err(`p${i}_birth_date`)} onChange={e => setPaxField(i, 'birth_date', e.target.value)} />
-              <Field label={need ? 'Documento de identidad (PDF o imagen) *' : 'Documento de identidad (PDF o imagen)'} error={err(`p${i}_file`)}>
+              <TextInput label="Nombres" value={p.first_names} error={err(`p${i}_first_names`)} onChange={e => setPaxField(i, 'first_names', e.target.value)} autoComplete="off" />
+              <TextInput label="Apellidos" value={p.last_names} error={err(`p${i}_last_names`)} onChange={e => setPaxField(i, 'last_names', e.target.value)} autoComplete="off" />
+              <Select label="Tipo de documento" value={p.document_type} onChange={e => setPaxField(i, 'document_type', e.target.value)}>{DOC_TYPES.map(t => <option key={t}>{t}</option>)}</Select>
+              <TextInput label="Número de documento" value={p.document_number} error={err(`p${i}_document_number`)} onChange={e => setPaxField(i, 'document_number', e.target.value)} autoComplete="off" />
+              <TextInput label="Fecha de nacimiento" type="date" max={today()} value={p.birth_date} error={err(`p${i}_birth_date`)} onChange={e => setPaxField(i, 'birth_date', e.target.value)} />
+              <Field label="Documento de identidad (PDF o imagen)" error={err(`p${i}_file`)}>
                 <label className="btn-ghost w-full cursor-pointer justify-start"><FileUp size={14} /><span className="truncate">{p.file ? p.file.name : 'Seleccionar archivo'}</span>
                   <input type="file" className="hidden" accept={ACCEPT} onChange={ev => { pickPax(i, ev.target.files?.[0]); ev.target.value = '' }} /></label>
               </Field>
@@ -282,7 +261,7 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
           <button type="button" className="btn-ghost" onClick={() => setPax(p => [...p, emptyPax()])}><Plus size={14} />Agregar {existing.length + pax.length ? 'otro ' : ''}pasajero</button>
         )}
 
-        {type && <>
+        {(type || description) && <>
           <H>Archivos complementarios (opcional)</H>
           <div className="space-y-2">
             {extras.map((f, j) => <div key={j} className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm"><span className="truncate">{f.name}</span><button type="button" onClick={() => setExtras(x => x.filter((_, k) => k !== j))} className="text-muted hover:text-red-500" aria-label="Quitar archivo"><Trash2 size={14} /></button></div>)}
@@ -292,16 +271,16 @@ export function PortalForm({ token, initial, existing = [], mode = 'create', ite
           </div>
         </>}
 
-        {type && !update && <>
+        {!update && <>
           <H>Aviso de privacidad</H>
           <details className="rounded-lg border border-line p-3"><summary className="cursor-pointer text-sm font-medium">Leer el aviso de privacidad</summary><div className="mt-3">{PRIVACY}</div></details>
           <label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={accepted} onChange={e => { setAccepted(e.target.checked); clearBad('privacy') }} />
-            <span className={err('privacy') ? 'text-red-500' : ''}>He leído el aviso de privacidad y autorizo el tratamiento de mis datos personales para gestionar esta solicitud.</span></label>
+            <span className={err('privacy') ? 'text-red-500' : ''}>He leído el aviso de privacidad y autorizo el tratamiento de mis datos personales para gestionar esta solicitud. (Opcional)</span></label>
         </>}
 
         <div className="flex justify-end gap-2 pt-2">
           {onCancel && <button type="button" className="btn-ghost" disabled={busy} onClick={onCancel}>Cancelar</button>}
-          <button className="btn-primary" disabled={busy || !type}>{busy && <Spinner />}{busy ? 'Enviando…' : mode === 'add' ? 'Agregar requerimiento' : update ? 'Guardar cambios' : 'Enviar solicitud'}</button>
+          <button className="btn-primary" disabled={busy}>{busy && <Spinner />}{busy ? 'Enviando…' : mode === 'add' ? 'Agregar requerimiento' : update ? 'Guardar cambios' : 'Enviar solicitud'}</button>
         </div>
       </div>
     </form>

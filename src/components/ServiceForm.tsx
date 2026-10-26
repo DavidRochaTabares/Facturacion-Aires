@@ -420,7 +420,7 @@ export default function ServiceForm({ type, initial, initialDocs, submitLabel = 
           <TextInput label="OC" warn={warn('OC')} {...tv('oc')} />
           <TextInput label="Recibida" type="date" warn={warn('Recibida')} {...tv('received')} />
           <TextInput label="Se pagó" type="date" {...tv('paid')} />
-          <TextInput label="Valor cobrado / cotizado" type="number" min={0} value={d.charged_quoted_value ?? ''} onChange={onQuote} />
+          <TextInput label="Valor de costo" type="number" min={0} value={d.charged_quoted_value ?? ''} onChange={onQuote} />
           <Select label="¿Incluye IVA del 19%?" value={d.has_iva ? 'si' : 'no'} onChange={onIva}><option value="no">No</option><option value="si">Sí</option></Select>
         </div>
         </>

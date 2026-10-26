@@ -9,7 +9,7 @@ import type { ExtractedFood, ExtractedLoan, OperationInput } from '../types'
 import ServiceForm, { emptyDetails } from './ServiceForm'
 import { FilePreview, PageHeader, Spinner, BackButton } from './ui'
 
-type Stage = 'idle' | 'selected' | 'processing' | 'done' | 'manual'
+type Stage = 'idle' | 'processing' | 'done' | 'manual'
 
 const COPY = { loan: { title: 'Nuevo préstamo', path: '/prestamos' }, food: { title: 'Nueva alimentación', path: '/alimentacion' } } as const
 
@@ -18,6 +18,8 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
   const { title, path } = COPY[kind]
   const nav = useNavigate()
   const input = useRef<HTMLInputElement>(null)
+  const running = useRef(false)
+  const discard = useRef(false)
   const [stage, setStage] = useState<Stage>(start)
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState<string | null>(null)
@@ -25,16 +27,29 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
+  const analyze = async (f: File) => {
+    if (running.current) return
+    running.current = true
+    discard.current = false
+    setStage('processing'); setError('')
+    try {
+      const r = kind === 'food' ? await dataService.extractFoodDocument(f) : await dataService.extractLoanDocument(f)
+      if (!discard.current) { setEx(r); setStage('done') }
+    } catch (e) {
+      if (!discard.current) setError(e instanceof Error ? e.message : 'No se pudo analizar el documento.')
+    } finally { running.current = false }
+  }
   const pick = async (f?: File) => {
     if (!f) return
     try {
       const n = await normalizeDocFile(f, 'pdf-or-image')
-      setError(''); setFile(n); setUrl(URL.createObjectURL(n)); setEx(null); setStage('selected')
+      setError(''); setFile(n); setUrl(URL.createObjectURL(n)); setEx(null)
+      void analyze(n)
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo leer el archivo.') }
   }
   useEffect(() => blockStrayFileDrops(), [])
   useEffect(() => {
-    if (stage !== 'idle' && stage !== 'selected') return
+    if (stage !== 'idle') return
     const h = (e: ClipboardEvent) => {
       const f = e.clipboardData?.files?.[0]
       if (f) { e.preventDefault(); pick(f) }
@@ -44,18 +59,8 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
   }, [stage])
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
 
-  const analyze = async () => {
-    if (!file) return
-    setStage('processing'); setError('')
-    try {
-      setEx(kind === 'food' ? await dataService.extractFoodDocument(file) : await dataService.extractLoanDocument(file))
-      setStage('done')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo analizar el documento.')
-      setStage('selected')
-    }
-  }
-  const reset = () => { setFile(null); setUrl(null); setEx(null); setStage('idle') }
+  const manual = () => { discard.current = true; setEx(null); setStage('manual') }
+  const reset = () => { discard.current = true; setFile(null); setUrl(null); setEx(null); setStage('idle') }
   const save = async (v: OperationInput, docs?: { file: File; category: 'ticket' | 'payment' | 'supplier_invoice' | 'agency_invoice' | 'other' }[]) => { setBusy(true); await dataService.createOperation(v, docs ?? (file ? [{ file, category: 'payment' as const }] : [])); nav(path) }
 
   const exLoan = ex as ExtractedLoan | null
@@ -101,12 +106,15 @@ export default function LoanIntake({ onBack, start = 'idle', kind = 'loan' }: { 
       <div className="grid gap-4 lg:grid-cols-2 items-start">
         <div className="card p-3 lg:sticky lg:top-6 h-[70vh]"><FilePreview url={url} mime={file?.type} className="h-full" /></div>
         <div className="card p-5">
-          {stage === 'selected' && (
-            <div className="text-center py-16"><p className="font-medium">Archivo listo</p><p className="text-sm text-muted mt-1 mb-4">Revisa la vista previa y analiza el documento.</p>
-              <div className="flex justify-center gap-2"><button className="btn-primary" onClick={analyze}>Analizar documento</button><button className="btn-ghost" onClick={() => setStage('manual')}>Llenar manualmente</button></div>
-              {error && <p role="alert" className="text-sm text-red-500 mt-3">{error}</p>}</div>
+          {stage === 'processing' && (
+            <div className="text-center py-16 text-muted flex flex-col items-center gap-3"><Spinner className="text-brand" /><p className="text-sm">Analizando documento…</p>
+              {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
+              <div className="flex gap-2 mt-2">
+                {error && file && <button className="btn-ghost" onClick={() => file && analyze(file)}>Reintentar</button>}
+                <button className="btn-ghost" onClick={manual}>Llenar manualmente sin esperar</button>
+              </div>
+            </div>
           )}
-          {stage === 'processing' && <div className="text-center py-16 text-muted flex flex-col items-center gap-3"><Spinner className="text-brand" /><p className="text-sm">Analizando documento…</p></div>}
           {stage === 'done' && initial && (
             <>
               <div className="rounded-lg bg-surface2 p-3 mb-4">

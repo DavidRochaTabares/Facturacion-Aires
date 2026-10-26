@@ -2,7 +2,7 @@
 // The token travels in the x-portal-token header (never in a URL / query string). Only its SHA-256 hash is looked up in the database.
 // The service-role key lives only inside this function. The client can read/write ONLY its own conversation and can never close, reopen or delete anything.
 import { checkFile, type CheckedFile, EXT, MAX_FILES_TOTAL_BYTES } from './files.ts'
-import { validateSubmission, validateUpdate, validateItem, PASSENGERS_REQUIRED } from './validate.ts'
+import { validateSubmission, validateUpdate, validateItem } from './validate.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -166,11 +166,10 @@ Deno.serve(async (req: Request) => {
       total += c.size; entries.push({ file: c, key })
     }
     const count = Array.isArray(payload?.passengers) ? Math.min(payload.passengers.length, 10) : 0
-    const needId = PASSENGERS_REQUIRED.includes(String(payload?.request_type))
     for (let i = 0; i < count; i++) {
       const p = payload.passengers[i]
       const name = [p?.first_names, p?.last_names].filter((x: unknown) => typeof x === 'string' && x.trim()).join(' ').trim()
-      await pull(`file_p${i}`, `el documento de identidad del pasajero ${i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, needId)
+      await pull(`file_p${i}`, `el documento de identidad del pasajero ${i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, false)
     }
     for (let j = 0; j < MAX_EXTRA_FILES; j++) await pull(`file_x${j}`, `el archivo complementario ${j + 1}`, false)
     if (total > MAX_FILES_TOTAL_BYTES) problems.push('Los archivos superan el tamaño total permitido (40 MB).')
@@ -190,7 +189,6 @@ Deno.serve(async (req: Request) => {
   if (action === 'update_request') {
     if (!form) return fail(400, 'Solicitud no válida.')
     if (info.status === 'closed') return fail409('portal:closed')
-    if (!info.submitted) return fail409('portal:not_submitted')
     let payload: any
     try { payload = JSON.parse(String(form.get('payload') ?? '')) } catch { return fail(400, 'Solicitud no válida.') }
     const current = await rpc('portal_get', { p_hash: hash })
@@ -208,11 +206,10 @@ Deno.serve(async (req: Request) => {
       total += c.size; entries.push({ file: c, key })
     }
     const fresh = Array.isArray(payload?.passengers) ? Math.min(payload.passengers.length, 10) : 0
-    const needId = PASSENGERS_REQUIRED.includes(String(payload?.request_type))
     for (let i = 0; i < fresh; i++) {
       const p = payload.passengers[i]
       const name = [p?.first_names, p?.last_names].filter((x: unknown) => typeof x === 'string' && x.trim()).join(' ').trim()
-      await pull(`file_p${i}`, `el documento de identidad del pasajero ${existing + i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, needId)
+      await pull(`file_p${i}`, `el documento de identidad del pasajero ${existing + i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, false)
     }
     for (let j = 0; j < MAX_EXTRA_FILES; j++) await pull(`file_x${j}`, `el archivo complementario ${j + 1}`, false)
     if (total > MAX_FILES_TOTAL_BYTES) problems.push('Los archivos superan el tamaño total permitido (40 MB).')
@@ -233,7 +230,6 @@ Deno.serve(async (req: Request) => {
   if (action === 'add_item' || action === 'update_item') {
     if (!form) return fail(400, 'Solicitud no válida.')
     if (info.status === 'closed') return fail409('portal:closed')
-    if (!info.submitted) return fail409('portal:not_submitted')
     let payload: any
     try { payload = JSON.parse(String(form.get('payload') ?? '')) } catch { return fail(400, 'Solicitud no válida.') }
     const itemId = action === 'update_item' ? String(json?.item_id ?? form.get('item_id') ?? '') : ''
@@ -255,11 +251,10 @@ Deno.serve(async (req: Request) => {
       total += c.size; entries.push({ file: c, key })
     }
     const fresh = Array.isArray(payload?.passengers) ? Math.min(payload.passengers.length, 10) : 0
-    const needId = PASSENGERS_REQUIRED.includes(String(payload?.request_type))
     for (let i = 0; i < fresh; i++) {
       const p = payload.passengers[i]
       const name = [p?.first_names, p?.last_names].filter((x: unknown) => typeof x === 'string' && x.trim()).join(' ').trim()
-      await pull(`file_p${i}`, `el documento de identidad del pasajero ${existing + i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, needId)
+      await pull(`file_p${i}`, `el documento de identidad del pasajero ${existing + i + 1}${name ? ` (${name.slice(0, 60)})` : ''}`, false)
     }
     for (let j = 0; j < MAX_EXTRA_FILES; j++) await pull(`file_x${j}`, `el archivo complementario ${j + 1}`, false)
     if (total > MAX_FILES_TOTAL_BYTES) problems.push('Los archivos superan el tamaño total permitido (40 MB).')
@@ -289,7 +284,6 @@ Deno.serve(async (req: Request) => {
   if (action === 'message') {
     if (!form) return fail(400, 'Solicitud no válida.')
     if (info.status === 'closed') return fail409('portal:closed')
-    if (!info.submitted) return fail409('portal:not_submitted')
     const body = String(form.get('body') ?? '')
     if (body.length > 5000) return fail409('portal:too_long')
     const problems: string[] = []

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { normalizeDocFile } from '../lib/files'
+import { queueRefresh } from '../lib/refresh'
 import type { ClientRequestFull, ClientRequestItem, ClientRequestRow, RequestAttachment, RequestMessage, RequestPassenger, RequestType } from '../types/requests'
 
 // Agency side of "Solicitudes de clientes". Every call runs with the agency's Supabase session: RLS and the cr_* functions validate session and
@@ -74,16 +75,18 @@ export const requestsService = {
   async create(name = ''): Promise<{ id: string; token: string }> {
     const { data, error } = await supabase.rpc('create_client_request', { p_name: name.trim() || '' })
     if (error) fail(error)
+    queueRefresh()
     return data as { id: string; token: string }
   },
   async regenerate(id: string): Promise<string> {
     const { data, error } = await supabase.rpc('regenerate_client_request_link', { p_id: id })
     if (error) fail(error)
+    queueRefresh()
     return (data as { token: string }).token
   },
-  async revoke(id: string) { const { error } = await supabase.rpc('revoke_client_request_link', { p_id: id }); if (error) fail(error) },
-  async setClosed(id: string, closed: boolean) { const { error } = await supabase.rpc('set_client_request_closed', { p_id: id, p_closed: closed }); if (error) fail(error) },
-  async markRead(id: string) { const { error } = await supabase.rpc('mark_client_request_read', { p_id: id }); if (error) fail(error) },
+  async revoke(id: string) { const { error } = await supabase.rpc('revoke_client_request_link', { p_id: id }); if (error) fail(error); queueRefresh() },
+  async setClosed(id: string, closed: boolean) { const { error } = await supabase.rpc('set_client_request_closed', { p_id: id, p_closed: closed }); if (error) fail(error); queueRefresh() },
+  async markRead(id: string) { const { error } = await supabase.rpc('mark_client_request_read', { p_id: id }); if (error) fail(error); queueRefresh() },
 
   /** Uploads the files to the private bucket first and registers the message afterwards; if anything fails, the uploaded files are removed again. */
   async postMessage(id: string, body: string, files: File[]): Promise<void> {
@@ -101,6 +104,7 @@ export const requestsService = {
       }
       const { error } = await supabase.rpc('agency_post_message', { p_id: id, p_body: body, p_attachments: uploaded })
       if (error) fail(error)
+      queueRefresh()
     } catch (e) {
       if (uploaded.length) await supabase.storage.from(BUCKET).remove(uploaded.map(u => u.storage_path))
       throw e
@@ -115,10 +119,10 @@ export const requestsService = {
   },
 
   // ---- deletions: the database part is one transaction; the physical files are queued by a trigger and removed afterwards (retryable) ----
-  async deleteRequest(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request', { p_id: id }); if (error) fail(error); return this.processCleanup() },
-  async deleteMessage(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request_message', { p_id: id }); if (error) fail(error); return this.processCleanup() },
-  async deleteAttachment(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request_attachment', { p_id: id }); if (error) fail(error); return this.processCleanup() },
-  async deletePassenger(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request_passenger', { p_id: id }); if (error) fail(error); return this.processCleanup() },
+  async deleteRequest(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request', { p_id: id }); if (error) fail(error); const r = await this.processCleanup(); queueRefresh(); return r },
+  async deleteMessage(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request_message', { p_id: id }); if (error) fail(error); const r = await this.processCleanup(); queueRefresh(); return r },
+  async deleteAttachment(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request_attachment', { p_id: id }); if (error) fail(error); const r = await this.processCleanup(); queueRefresh(); return r },
+  async deletePassenger(id: string): Promise<CleanupResult> { const { error } = await supabase.rpc('delete_client_request_passenger', { p_id: id }); if (error) fail(error); const r = await this.processCleanup(); queueRefresh(); return r },
 
   /** Removes from Storage every file queued in client_request_cleanup. A task is dropped only when the object is really gone, so failures stay queued and can be retried. */
   async processCleanup(): Promise<CleanupResult> {
@@ -146,5 +150,6 @@ export const requestsService = {
   async linkOperation(requestId: string, operationId: string) {
     const { error } = await supabase.rpc('link_client_request_operation', { p_request: requestId, p_operation: operationId })
     if (error) fail(error)
+    queueRefresh()
   },
 }

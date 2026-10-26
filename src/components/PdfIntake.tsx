@@ -9,12 +9,14 @@ import type { OperationInput } from '../types'
 import ServiceForm from './ServiceForm'
 import { FilePreview, PageHeader, Spinner, BackButton } from './ui'
 
-type Stage = 'idle' | 'selected' | 'processing' | 'done'
+type Stage = 'idle' | 'processing' | 'done'
 const LABEL = { flight: 'vuelo', hotel: 'hotel' } as const
 
 export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; onBack: () => void }) {
   const nav = useNavigate()
   const input = useRef<HTMLInputElement>(null)
+  const running = useRef(false)
+  const discard = useRef(false)
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState<string | null>(null)
   const [stage, setStage] = useState<Stage>('idle')
@@ -26,25 +28,28 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url) }, [url])
   useEffect(() => blockStrayFileDrops(), [])
 
+  const analyze = async (f: File) => {
+    if (running.current) return
+    running.current = true
+    discard.current = false
+    setStage('processing'); setError('')
+    try {
+      const r = type === 'flight' ? await dataService.extractEmission(f) : await dataService.extractHotelVoucher(f)
+      if (!discard.current) { setResult(r); setStage('done') }
+    } catch (e) {
+      if (!discard.current) { setError(e instanceof Error ? e.message : 'No se pudo analizar el documento.'); setStage('processing') }
+    } finally { running.current = false }
+  }
   const pick = async (f?: File) => {
     if (!f) return
     try {
       const n = await normalizeDocFile(f, 'pdf')
-      setError(''); setFile(n); setUrl(URL.createObjectURL(n)); setResult(null); setStage('selected')
+      setError(''); setFile(n); setUrl(URL.createObjectURL(n)); setResult(null)
+      void analyze(n)
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo leer el archivo.') }
   }
-  const analyze = async () => {
-    if (!file) return
-    setStage('processing'); setError('')
-    try {
-      setResult(type === 'flight' ? await dataService.extractEmission(file) : await dataService.extractHotelVoucher(file))
-      setStage('done')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo analizar el documento.')
-      setStage('selected')
-    }
-  }
-  const reset = () => { setFile(null); setUrl(null); setResult(null); setStage('idle') }
+  const manual = () => { discard.current = true; setResult(null); setStage('done') }
+  const reset = () => { discard.current = true; setFile(null); setUrl(null); setResult(null); setStage('idle') }
 
   if (stage === 'idle') return (
     <>
@@ -58,7 +63,7 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
     </>
   )
 
-  const initial = result && { provider: result.provider ?? '', amount: result.amount ?? 0, details: result.details } as Partial<OperationInput>
+  const initial = result ? { provider: result.provider ?? '', amount: result.amount ?? 0, details: result.details } as Partial<OperationInput> : undefined
 
   return (
     <>
@@ -66,16 +71,19 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
       <div className="grid gap-4 lg:grid-cols-2 items-start">
         <div className="card p-3 lg:sticky lg:top-6 h-[70vh]"><FilePreview url={url} className="h-full" /></div>
         <div className="card p-5">
-          {stage === 'selected' && (
-            <div className="text-center py-16"><p className="font-medium">Archivo listo</p><p className="text-sm text-muted mt-1 mb-4">Revisa la vista previa y analiza el documento.</p>
-              <button className="btn-primary" onClick={analyze}>Analizar PDF</button>
-              {error && <p role="alert" className="text-sm text-red-500 mt-3">{error}</p>}</div>
+          {stage === 'processing' && (
+            <div className="text-center py-16 text-muted flex flex-col items-center gap-3"><Spinner className="text-brand" /><p className="text-sm">Analizando documento…</p>
+              {error ? <p role="alert" className="text-sm text-red-500">{error}</p> : null}
+              <div className="flex gap-2 mt-2">
+                {error && file && <button className="btn-ghost" onClick={() => file && analyze(file)}>Reintentar</button>}
+                <button className="btn-ghost" onClick={manual}>Llenar manualmente sin esperar</button>
+              </div>
+            </div>
           )}
-          {stage === 'processing' && <div className="text-center py-16 text-muted flex flex-col items-center gap-3"><Spinner className="text-brand" /><p className="text-sm">Analizando documento…</p></div>}
-          {stage === 'done' && initial && (
+          {stage === 'done' && (
             <>
-              <p className="text-sm text-muted mb-4">Información extraída. Corrige y completa lo que falte antes de guardar.</p>
-              <ServiceForm key={type + (result?.details.booking_code ?? result?.details.reservation_number)} type={type} initial={initial} busy={busy} onCancel={reset}
+              <p className="text-sm text-muted mb-4">{result ? 'Información extraída. Corrige y completa lo que falte antes de guardar.' : 'Diligencia el formulario manualmente.'}</p>
+              <ServiceForm key={type + (result?.details.booking_code ?? result?.details.reservation_number ?? 'manual')} type={type} initial={initial} busy={busy} onCancel={reset}
                 initialDocs={file ? [{ file, category: 'ticket' }] : []}
                 onSubmit={async (v, docs) => { setBusy(true); await dataService.createOperation(v, docs); nav(SECTIONS[type].path) }} />
             </>

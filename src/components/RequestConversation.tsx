@@ -248,6 +248,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
                       className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted transition hover:bg-surface hover:text-brand disabled:opacity-40"><Paperclip size={20} /></button>
                     <input ref={input} type="file" multiple className="hidden" accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp" onChange={e => { const picked = [...(e.target.files ?? [])]; setFiles(x => [...x, ...picked].slice(0, 10)); e.target.value = '' }} />
                     <textarea ref={area} rows={1} placeholder="Escribe tu respuesta…" aria-label="Respuesta" value={text} maxLength={5000} onChange={e => setText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }}
                       className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-5 text-fg outline-none placeholder:text-muted" />
                     <button type="submit" disabled={sending || (!text.trim() && !files.length)} aria-label={sending ? 'Enviando…' : 'Enviar respuesta'} title="Enviar"
                       className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white shadow-sm transition hover:opacity-90 disabled:opacity-40 dark:text-slate-900">{sending ? <Spinner /> : <Send size={18} />}</button>

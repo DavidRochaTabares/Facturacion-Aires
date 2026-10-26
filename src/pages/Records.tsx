@@ -22,7 +22,7 @@ const date = (h = 'Fecha'): Col => ({ h, cell: r => d(r.date) })
 const company: Col = { h: 'Empresa', cell: r => r.company_name }
 const provider: Col = { h: 'Proveedor', cell: r => v(r.provider) }
 const invoice: Col = { h: 'Factura', mono: true, cell: r => v(r.invoice_number) }
-const cost = (h = 'Valor'): Col => ({ h, right: true, cell: r => money(r.amount) })
+const cost = (h = 'Valor de costo'): Col => ({ h, right: true, cell: r => money(r.amount) })
 const charge: Col = { h: 'A cobrar', right: true, cell: r => <b className="font-medium">{money(r.charge_amount)}</b> }
 
 const TABS: { key: string; label: string; types: OperationType[]; cols: Col[] }[] = [
@@ -58,11 +58,13 @@ const TABS: { key: string; label: string; types: OperationType[]; cols: Col[] }[
     { h: 'Valor insumo', right: true, cell: on('food', r => n(r.details.supplies_value)) }, { h: 'Valor transporte', right: true, cell: on('food', r => n(r.details.transport_value)) },
     { h: 'Costo total', right: true, cell: on('food', r => money(r.details.total_cost)) }, charge, provider, { h: 'Observaciones', cell: r => v(r.observations) }] },
   { key: 'loan', label: 'Préstamos', types: ['loan'], cols: [date(), company,
-    { h: 'Solicitud', cell: on('loan', r => v(r.details.request)) }, cost(), invoice, { h: 'Fecha factura', cell: on('loan', r => d(r.details.invoice_date)) },
+    { h: 'Solicitud', cell: on('loan', r => v(r.details.request)) },
+    { h: 'Valor de costo', right: true, cell: on('loan', r => n(r.details.charged_quoted_value ?? r.amount)) }, charge,
+    invoice, { h: 'Fecha factura', cell: on('loan', r => d(r.details.invoice_date)) },
     { h: 'COT', mono: true, cell: on('loan', r => v(r.details.cot)) }, { h: 'Enviada', cell: on('loan', r => d(r.details.sent)) },
-    { h: 'Valor cobrado/cotizado', right: true, cell: on('loan', r => n(r.details.charged_quoted_value)) }, { h: 'IVA', right: true, cell: on('loan', r => n(r.details.iva)) }, { h: 'Total con IVA', right: true, cell: on('loan', r => (r.details.has_iva ? n(r.charge_amount + (r.details.iva ?? 0)) : '—')) },
+    { h: 'IVA', right: true, cell: on('loan', r => n(r.details.iva)) }, { h: 'Total con IVA', right: true, cell: on('loan', r => (r.details.has_iva ? n(r.charge_amount + (r.details.iva ?? 0)) : '—')) },
     { h: 'OC', mono: true, cell: on('loan', r => v(r.details.oc)) }, { h: 'Recibida', cell: on('loan', r => d(r.details.received)) },
-    { h: 'Solicitó', cell: on('loan', r => v(r.details.requested_by)) }, { h: 'Se pagó', cell: on('loan', r => d(r.details.paid)) }, provider, charge] },
+    { h: 'Solicitó', cell: on('loan', r => v(r.details.requested_by)) }, { h: 'Se pagó', cell: on('loan', r => d(r.details.paid)) }, provider] },
   { key: 'other', label: 'Otros', types: ['additional', 'other'], cols: [date(), company, { h: 'Tipo', cell: r => <TypeBadge type={r.type} /> }, provider,
     { h: 'Descripción', cell: r => (r.type === 'additional' || r.type === 'other' ? v(r.details.description) : null) }, invoice, cost(), charge, { h: 'Observaciones', cell: r => v(r.observations) }] },
 ]
@@ -127,7 +129,7 @@ export default function Records({ section }: { section?: SectionKey }) {
   const line = (r: OperationRow, prefix = '', grouped = false) => (
     <tr key={r.id} onClick={() => setSelected({ id: r.id, edit: false })} className={`cursor-pointer hover:bg-surface2/60 ${grouped ? '[&>td:first-child]:border-l-4 [&>td:first-child]:border-brand/50' : ''}`}>
       {cur.cols.map((c, i) => (
-        <td key={c.h} style={c.sticky ? { left: c.sticky } : undefined} className={`td !px-2 !py-1.5 ${flight ? '!whitespace-nowrap' : '!whitespace-normal'} ${c.sticky ? 'sticky z-10 bg-surface' : ''} ${c.h === 'Observación' ? 'max-w-[16rem] truncate' : ''} ${c.right ? 'text-right tabular-nums' : ''} ${c.mono ? 'font-mono text-xs' : ''}`}>
+        <td key={c.h} style={c.sticky ? { left: c.sticky } : undefined} className={`td !px-2 !py-1.5 ${flight ? '!whitespace-nowrap' : '!whitespace-normal'} ${c.sticky ? 'lg:sticky lg:z-10 lg:bg-surface' : ''} ${c.h === 'Observación' ? 'max-w-[16rem] truncate' : ''} ${c.right ? 'text-right tabular-nums' : ''} ${c.mono ? 'font-mono text-xs' : ''}`}>
           {i === 0 && prefix && <span className="text-muted">{prefix}</span>}{c.cell(r)}
           {i === 0 && r.missing.length > 0 && <span title={`Faltan: ${r.missing.join(', ')}`} className="mt-1 flex w-fit items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300"><AlertTriangle size={11} />Incompleto</span>}
           {i === 0 && alertByOp.has(r.id) && <span title={`Factura pendiente de cobro · vence ${fdate(alertByOp.get(r.id)!.due_date)}`} className="mt-1 flex w-fit items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] text-red-600 dark:text-red-400"><AlertTriangle size={11} />Por cobrar · {fdate(alertByOp.get(r.id)!.due_date)}</span>}
@@ -179,7 +181,7 @@ export default function Records({ section }: { section?: SectionKey }) {
       <div className="card overflow-hidden">
         {loading ? <Loading /> : shown.length === 0 ? <Empty>No hay registros con estos filtros.</Empty> : (
           <div className={`overflow-auto ${flight ? 'max-h-[72vh]' : ''}`}><table className={`w-full text-[13px] ${flight ? 'min-w-max' : ''}`}>
-            <thead><tr className="border-b border-line bg-surface2/50">{cur.cols.map(c => <th key={c.h} style={c.sticky ? { left: c.sticky } : undefined} className={`th !px-2 ${c.right ? 'text-right' : ''} ${flight ? `sticky top-0 bg-surface2 ${c.sticky ? 'z-20' : 'z-10'}` : ''}`}>{c.h}</th>)}<th className={`th !px-2 ${flight ? 'sticky top-0 z-10 bg-surface2' : ''}`}>Doc.</th><th className={`th !px-2 ${flight ? 'sticky top-0 z-10 bg-surface2' : ''}`}>Acciones</th></tr></thead>
+            <thead><tr className="border-b border-line bg-surface2/50">{cur.cols.map(c => <th key={c.h} style={c.sticky ? { left: c.sticky } : undefined} className={`th !px-2 ${c.right ? 'text-right' : ''} ${flight ? `${c.sticky ? 'lg:sticky lg:top-0 lg:z-20' : 'sticky top-0 z-10'} bg-surface2` : ''}`}>{c.h}</th>)}<th className={`th !px-2 ${flight ? 'sticky top-0 z-10 bg-surface2' : ''}`}>Doc.</th><th className={`th !px-2 ${flight ? 'sticky top-0 z-10 bg-surface2' : ''}`}>Acciones</th></tr></thead>
             <tbody className="divide-y divide-line">{items.map(it => 'row' in it ? line(it.row) : 'res' in it ? reservation(it) : (
               <Fragment key={it.group.id}>
                 <tr onClick={() => toggle(it.group.id)} className="cursor-pointer bg-brand/5 hover:bg-brand/10">
