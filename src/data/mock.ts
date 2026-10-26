@@ -126,6 +126,7 @@ const bank = (
   db.bank.push({
     id,
     date,
+    kind: movement_type === 'Ingreso' ? 'income' : movement_type === 'Transferencia' ? 'transfer' : movement_type === 'Otro' ? 'other' : 'expense',
     bank_name: '',
     description,
     amount,

@@ -251,6 +251,7 @@ export class SupabaseDataService extends MockDataService {
 
   async getBankMovements(f: BankFilters = {}): Promise<BankMovementRow[]> {
     let q = supabase.from('bank_movements').select('*, bank_documents(*)').order('movement_date', { ascending: false }).order('created_at', { ascending: false })
+    if (f.kind) q = q.eq('movement_type', f.kind)
     if (f.movement_type) {
       const e = bankEnumOfLabel(f.movement_type)
       q = q.or(`category.eq.${quote(f.movement_type)}${e ? `,and(category.eq."",movement_type.eq.${e})` : ''}`)

@@ -230,7 +230,7 @@ export class MockDataService implements DataService {
   private bankRows(f: BankFilters = {}): BankMovementRow[] {
     const q = f.search?.trim().toLowerCase()
     return this.db.bank
-      .filter(m => (!f.movement_type || m.movement_type === f.movement_type) && (!f.date_from || m.date >= f.date_from) && (!f.date_to || m.date <= f.date_to)
+      .filter(m => (!f.kind || m.kind === f.kind) && (!f.movement_type || m.movement_type === f.movement_type) && (!f.date_from || m.date >= f.date_from) && (!f.date_to || m.date <= f.date_to)
         && (!q || JSON.stringify(m).toLowerCase().includes(q)))
       .sort((a, b) => b.date.localeCompare(a.date))
       .map(m => ({ ...m, documents: this.db.bankDocs.filter(d => d.movement_id === m.id) }))

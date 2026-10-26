@@ -1,4 +1,4 @@
-import type { DocCategory, FlightData, LoanData, OperationInput, OperationRow, OperationType, PersonalKind } from '../types'
+import type { BankKind, DocCategory, FlightData, LoanData, OperationInput, OperationRow, OperationType, PersonalKind } from '../types'
 
 export const DOC_CATEGORIES: DocCategory[] = ['ticket', 'payment', 'supplier_invoice', 'agency_invoice', 'other']
 export const DOC_CATEGORY_LABEL: Record<DocCategory, string> = {
@@ -11,6 +11,7 @@ export const DOC_CATEGORY_LABEL: Record<DocCategory, string> = {
 export const PERSONAL_CATEGORIES = ['Alimentación', 'Transporte', 'Vivienda', 'Servicios', 'Salud', 'Compras', 'Entretenimiento', 'Transferencias', 'Otros']
 export const PERSONAL_METHODS = ['Efectivo', 'Transferencia', 'Tarjeta débito', 'Tarjeta crédito', 'Otro']
 export const PERSONAL_KIND_LABEL: Record<PersonalKind, string> = { income: 'Ingreso', expense: 'Gasto' }
+export const BANK_KIND_LABEL: Record<BankKind, string> = { income: 'Ingreso', expense: 'Egreso', transfer: 'Transferencia', other: 'Otro' }
 
 export const GROUPABLE: OperationType[] = ['flight', 'hotel']
 export const MARKUP: Partial<Record<OperationType, number>> = { flight: 1.3, hotel: 1.3, loan: 1.2, food: 1.2 }

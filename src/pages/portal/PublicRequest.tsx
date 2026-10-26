@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Lock, MessageCircle, Moon, Paperclip, Pencil, Plus, Send, Sun } from 'lucide-react'
+import { ArrowLeft, Lock, MessageCircle, Moon, Paperclip, Pencil, Plane, Plus, Send, Sun } from 'lucide-react'
 import spineDay from '../../assets/spinedev-day.png'
 import spineNight from '../../assets/spinedev-night.png'
 import { AttachmentCard, forgetPreview, PendingFiles, type UrlResolver } from '../../components/AttachmentPreview'
@@ -113,12 +113,44 @@ export default function PublicRequest() {
     <Shell fill={chat}>
       {/* The form stays mounted once opened (hidden, not unmounted): nothing the client typed is lost. */}
       {!chat && (
-        <section className="card portal-fade flex flex-col items-center gap-3 p-5 text-center sm:p-7" aria-label="Elegir cómo continuar">
-          <h1 className="text-xl font-semibold tracking-tight">{data.request.client_name.trim() ? `Hola, ${data.request.client_name.trim().split(' ')[0]}` : 'Hola'}</h1>
-          <p className="max-w-md text-sm text-muted">Elige cómo quieres hacer tu solicitud: hablando con la agencia por chat o diligenciando tus datos en el formulario.</p>
-          <div className="mt-1 flex w-full max-w-sm flex-col gap-2">
-            <button type="button" className="btn-primary w-full" onClick={() => setChat(true)}><MessageCircle size={16} />Hablar con la agencia por chat</button>
-            <button type="button" className="btn-primary w-full" onClick={() => setFormOpen(o => !o)}><Pencil size={14} />{formOpen ? 'Ocultar el formulario' : 'Hacer mi solicitud con el formulario'}</button>
+        <section className="card portal-fade overflow-hidden text-center" aria-label="Elegir cómo continuar">
+          <div className="relative overflow-hidden bg-gradient-to-br from-blue-800 via-brand to-sky-500 px-6 py-8 text-white sm:px-10 sm:py-9">
+            {/* Decoración corporativa: halos y barras diagonales sutiles */}
+            <div className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/10 blur-2xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-10 h-56 w-56 rounded-full bg-sky-300/20 blur-2xl" />
+            <div className="pointer-events-none absolute inset-y-0 right-10 hidden w-px rotate-12 bg-white/10 sm:block" />
+            <div className="pointer-events-none absolute inset-y-0 right-16 hidden w-px rotate-12 bg-white/10 sm:block" />
+            <div className="relative flex flex-col items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{data.request.client_name.trim() ? `Hola, ${data.request.client_name.trim().split(' ')[0]}` : 'Hola'}</h1>
+              <p className="mx-auto max-w-md text-sm text-blue-50/90">Elige cómo quieres hacer tu solicitud: hablando con la agencia por chat o diligenciando tus datos en el formulario.</p>
+              <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-medium tracking-wide text-blue-50 backdrop-blur-sm">
+                <Plane size={12} /> Aires y Destinos · Tu agencia de confianza
+              </span>
+            </div>
+          </div>
+          <div className="grid gap-3 p-5 sm:grid-cols-2 sm:p-7">
+            <button
+              type="button"
+              onClick={() => setChat(true)}
+              className="group flex flex-col items-center gap-2 rounded-xl border-2 border-line bg-surface p-6 transition hover:border-brand hover:shadow-soft focus:outline-none focus:ring-2 focus:ring-brand/40"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand/10 text-brand transition group-hover:bg-brand group-hover:text-white">
+                <MessageCircle size={26} />
+              </span>
+              <span className="text-base font-semibold">Hablar por chat</span>
+              <span className="text-xs leading-relaxed text-muted">Escríbenos directamente y la agencia te responde en esta misma conversación.</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormOpen(o => !o)}
+              className="group flex flex-col items-center gap-2 rounded-xl border-2 border-line bg-surface p-6 transition hover:border-brand hover:shadow-soft focus:outline-none focus:ring-2 focus:ring-brand/40"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand/10 text-brand transition group-hover:bg-brand group-hover:text-white">
+                <Pencil size={24} />
+              </span>
+              <span className="text-base font-semibold">{formOpen ? 'Ocultar el formulario' : 'Llenar el formulario'}</span>
+              <span className="text-xs leading-relaxed text-muted">Diligencia los datos de tu solicitud a tu ritmo; nada es obligatorio.</span>
+            </button>
           </div>
         </section>
       )}

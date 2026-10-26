@@ -5,14 +5,17 @@ import { Drawer, Empty, FilePreview, FilterBar, Loading, Modal, PageHeader, Sele
 import { useAsync, useDebounced } from '../hooks'
 import { useTableCopy } from '../hooks/useTableCopy'
 import { fdate, fsize, money, SERVICE_LABEL } from '../lib/format'
+import { BANK_KIND_LABEL } from '../lib/service'
 import { dataService } from '../services'
 import type { BankDocument, BankFilters, BankMovementInput, BankMovementRow, PersonalMovementRow } from '../types'
 import PersonalMovements from './PersonalMovements'
+import BankReportBuilder from '../components/BankReportBuilder'
 
 const TYPES = ['Ingreso', 'Egreso', 'Transferencia', 'Comisión bancaria', 'Otro']
 
 const blank = (): BankMovementInput => ({
   date: new Date().toISOString().slice(0, 10),
+  kind: 'income',
   bank_name: '',
   description: '',
   amount: 0,
@@ -31,7 +34,7 @@ const blank = (): BankMovementInput => ({
 const todayStr = () => new Date().toISOString().slice(0, 10)
 
 export default function BankMovements() {
-  const [tab, setTab] = useState<'agency' | 'personal'>('agency')
+  const [tab, setTab] = useState<'agency' | 'personal' | 'reports'>('agency')
   const [personalEditing, setPersonalEditing] = useState<PersonalMovementRow | 'new' | null>(null)
   const [f, setF] = useState<BankFilters>({})
   const q = useDebounced(f.search)
@@ -67,12 +70,12 @@ export default function BankMovements() {
       <PageHeader title="Movimientos bancarios" subtitle="Control de la cuenta bancaria de la agencia (independiente de los registros de servicios)"
         actions={<button className="btn-primary" onClick={() => (tab === 'agency' ? setEditing('new') : setPersonalEditing('new'))}><Plus size={16} />Nuevo movimiento</button>} />
       <div className="mb-4 flex gap-1 rounded-lg border border-line bg-surface2/60 p-1 w-fit">
-        {([['agency', 'Agencia'], ['personal', 'Gastos personales']] as const).map(([k, l]) => (
+        {([['agency', 'Agencia'], ['personal', 'Gastos personales'], ['reports', 'Informes']] as const).map(([k, l]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`rounded-md px-4 py-1.5 text-sm transition ${tab === k ? 'bg-surface font-medium shadow-sm' : 'text-muted hover:text-fg'}`}>{l}</button>
         ))}
       </div>
-      {tab === 'personal' ? <PersonalMovements editing={personalEditing} setEditing={setPersonalEditing} /> : (<>
+      {tab === 'reports' ? <BankReportBuilder /> : tab === 'personal' ? <PersonalMovements editing={personalEditing} setEditing={setPersonalEditing} /> : (<>
       {(alerts ?? []).length > 0 && (
         <details className="card group mb-4 p-0" open={(alerts ?? []).filter(a => a.due_date <= todayStr()).length > 0 && (alerts ?? []).length <= 6}>
           <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-xs font-semibold uppercase tracking-wide text-muted [&::-webkit-details-marker]:hidden">
@@ -99,6 +102,7 @@ export default function BankMovements() {
       </div>
       {notice && <p role="status" className="mb-4 rounded-lg border border-line bg-surface2 p-3 text-sm">{notice}</p>}
       <FilterBar search={f.search ?? ''} onSearch={v => setF(p => ({ ...p, search: v }))} active={Object.entries(f).filter(([k, x]) => k !== 'search' && x).length}>
+        <div className="md:w-40"><Select value={f.kind ?? ''} onChange={set('kind')}><option value="">Ingresos y más</option>{(['income', 'expense', 'transfer', 'other'] as const).map(k => <option key={k} value={k}>{BANK_KIND_LABEL[k]}</option>)}</Select></div>
         <div className="md:w-48"><Select value={f.movement_type ?? ''} onChange={set('movement_type')}><option value="">Todos los tipos</option>{types.map(t => <option key={t}>{t}</option>)}</Select></div>
         <input type="date" className="input md:!w-40" aria-label="Desde" value={f.date_from ?? ''} onChange={set('date_from')} />
         <input type="date" className="input md:!w-40" aria-label="Hasta" value={f.date_to ?? ''} onChange={set('date_to')} />
@@ -135,8 +139,8 @@ export default function BankMovements() {
                     {r.description || '—'}
                   </td>
 
-                  <td className={`td select-none !px-2 !py-1.5 text-right tabular-nums font-medium ${copy.inSel(ri, 3) ? '!bg-brand/20' : ''}`}>
-                    {money(r.amount)}
+                  <td className={`td select-none !px-2 !py-1.5 text-right tabular-nums font-medium ${r.kind === 'expense' ? 'text-red-600 dark:text-red-400' : r.kind === 'income' ? 'text-emerald-600 dark:text-emerald-400' : ''} ${copy.inSel(ri, 3) ? '!bg-brand/20' : ''}`}>
+                    {r.kind === 'expense' ? '−' : r.kind === 'income' ? '+' : ''}{money(r.amount)}
                   </td>
 
                   <td className={`td select-none !px-2 !py-1.5 ${copy.inSel(ri, 4) ? '!bg-brand/20' : ''}`}>
@@ -304,19 +308,22 @@ function MovementForm({
             {...t('date')}
           />
 
+          <Select
+            label="Tipo *"
+            value={v.kind}
+            onChange={e => setV(p => ({ ...p, kind: e.target.value as BankMovementInput['kind'] }))}
+          >
+            {(['income', 'expense', 'transfer', 'other'] as const).map(k => <option key={k} value={k}>{BANK_KIND_LABEL[k]}</option>)}
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
           <TextInput
             label="Banco *"
             error={err.bank_name}
             {...t('bank_name')}
           />
-        </div>
 
-        <TextInput
-          label="Descripción"
-          {...t('description')}
-        />
-
-        <div className="grid grid-cols-2 gap-3">
           <TextInput
             label="Valor *"
             type="number"
@@ -330,7 +337,14 @@ function MovementForm({
               }))
             }
           />
+        </div>
 
+        <TextInput
+          label="Descripción"
+          {...t('description')}
+        />
+
+        <div className="grid grid-cols-2 gap-3">
           <TextInput
             label="Factura"
             {...t('invoice_number')}

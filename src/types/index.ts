@@ -221,9 +221,11 @@ export interface ServiceReport {
   by_month: Slice[]
 }
 
+export type BankKind = 'income' | 'expense' | 'transfer' | 'other'
 export interface BankMovement {
   id: string
   date: string
+  kind: BankKind
   bank_name: string
   description: string
   amount: number
@@ -243,7 +245,7 @@ export interface BankMovement {
 export type BankMovementInput = Omit<BankMovement, 'id' | 'created_at'>
 export interface BankDocument { id: string; movement_id: string; name: string; mime_type: string; size: number; storage_path: string; created_at: string; url?: string }
 export type BankMovementRow = BankMovement & { documents: BankDocument[] }
-export interface BankFilters { search?: string; movement_type?: string; date_from?: string; date_to?: string }
+export interface BankFilters { search?: string; kind?: BankKind | ''; movement_type?: string; date_from?: string; date_to?: string }
 export interface BankReport { count: number; total_amount: number; by_type: Slice[]; last_date: string }
 
 export interface ExtractedFlight { provider?: string; amount: number; details: FlightData }

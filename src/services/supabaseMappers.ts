@@ -74,7 +74,7 @@ export const bankPayload = (i: BankMovementInput) => ({
   amount: i.amount,
 
   // Compatibilidad con campos históricos
-  movement_type: bankEnumOf(i.movement_type),
+  movement_type: ['income','expense','transfer','other'].includes(i.kind) ? i.kind : bankEnumOf(i.movement_type),
   category: i.movement_type.trim(),
   beneficiary: i.beneficiary,
   reference_1: i.reference_1,
@@ -92,6 +92,7 @@ export const mapBankMovement = (r: any): BankMovementRow => ({
   date: day(r.movement_date),
 
   // Nuevos campos bancarios
+  kind: (['income','expense','transfer'].includes(r.movement_type) ? r.movement_type : 'other') as BankMovementRow['kind'],
   bank_name: r.bank_name ?? '',
   description: r.description ?? '',
   amount: Number(r.amount ?? 0),
