@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { AlertTriangle, Eye, FilterX, FileText, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Eye, FilterX, FileText, Paperclip, Pencil, Plus, Trash2 } from 'lucide-react'
 import { DeleteDialog } from '../components/DeleteDialog'
 import { Drawer, Empty, FilePreview, FilterBar, Loading, Modal, PageHeader, Select, Spinner, TextInput } from '../components/ui'
 import { useAsync, useDebounced } from '../hooks'
+import { useTableCopy } from '../hooks/useTableCopy'
 import { fdate, fsize, money, SERVICE_LABEL } from '../lib/format'
 import { dataService } from '../services'
 import type { BankDocument, BankFilters, BankMovementInput, BankMovementRow, PersonalMovementRow } from '../types'
@@ -43,6 +44,8 @@ export default function BankMovements() {
   const set = (k: keyof BankFilters) => (e: { target: { value: string } }) => setF(p => ({ ...p, [k]: e.target.value }))
 
   const [detail, setDetail] = useState<string | null>(null)
+  // Cell selection + Ctrl+C + auto-sum; only the "Valor" column (index 3) counts toward the total.
+  const copy = useTableCopy(6, [false, false, false, true, false, false], id => setDetail(id), tab)
   const [editing, setEditing] = useState<BankMovementRow | 'new' | null>(null)
   const [del, setDel] = useState<BankMovementRow | null>(null)
   const [delBusy, setDelBusy] = useState(false)
@@ -71,9 +74,14 @@ export default function BankMovements() {
       </div>
       {tab === 'personal' ? <PersonalMovements editing={personalEditing} setEditing={setPersonalEditing} /> : (<>
       {(alerts ?? []).length > 0 && (
-        <div className="card p-4 mb-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2 flex items-center gap-2"><AlertTriangle size={14} className="text-amber-500" />Facturas por cobrar</p>
-          <ul className="space-y-1.5 text-sm">
+        <details className="card group mb-4 p-0" open={(alerts ?? []).filter(a => a.due_date <= todayStr()).length > 0 && (alerts ?? []).length <= 6}>
+          <summary className="flex cursor-pointer list-none items-center gap-2 p-4 text-xs font-semibold uppercase tracking-wide text-muted [&::-webkit-details-marker]:hidden">
+            <AlertTriangle size={14} className="text-amber-500" />Facturas por cobrar
+            <span className="rounded-full bg-amber-500/15 px-2 py-0.5 normal-case text-amber-700 dark:text-amber-300">{alerts!.length}</span>
+            {(alerts ?? []).some(a => a.due_date <= todayStr()) && <span className="rounded-full bg-red-500/10 px-2 py-0.5 normal-case text-red-600 dark:text-red-400">{alerts!.filter(a => a.due_date <= todayStr()).length} vencidas</span>}
+            <ChevronDown size={15} className="ml-auto transition-transform group-open:rotate-180" />
+          </summary>
+          <ul className="max-h-72 space-y-1.5 overflow-y-auto border-t border-line px-4 py-3 text-sm">
             {(alerts ?? []).map(a => (
               <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
                 <span className="font-medium">{a.invoice_number ? `Factura ${a.invoice_number}` : `${SERVICE_LABEL[a.operation_type ?? 'other']} sin número de factura`}</span>
@@ -82,7 +90,7 @@ export default function BankMovements() {
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
       <div className="grid gap-4 sm:grid-cols-3 mb-4">
         <div className="card p-4"><p className="text-xs text-muted font-medium">Movimientos</p><p className="mt-2 text-xl font-semibold">{report?.count ?? '—'}</p></div>
@@ -98,7 +106,7 @@ export default function BankMovements() {
       </FilterBar>
       <div className="card overflow-hidden">
         {loading ? <Loading /> : !rows?.length ? <Empty>No hay movimientos.</Empty> : (
-          <div className="overflow-x-auto"><table className="w-full text-[13px]">
+          <div {...copy.props} className="overflow-x-auto"><table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-line bg-surface2/50">
                 {['Fecha', 'Banco', 'Descripción', 'Valor', 'Factura', 'Cliente'].map(h => (
@@ -108,33 +116,34 @@ export default function BankMovements() {
               </tr>
             </thead>            
             <tbody className="divide-y divide-line">
-              {rows.map(r => (
+              {rows.map((r, ri) => (
                 <tr
                   key={r.id}
-                  onClick={() => setDetail(r.id)}
+                  data-rr={ri}
+                  data-id={r.id}
                   className="cursor-pointer hover:bg-surface2/60"
                 >
-                  <td className="td !px-2 !py-1.5">
+                  <td className={`td select-none !px-2 !py-1.5 ${copy.inSel(ri, 0) ? '!bg-brand/20' : ''}`}>
                     {fdate(r.date)}
                   </td>
 
-                  <td className="td !px-2 !py-1.5">
+                  <td className={`td select-none !px-2 !py-1.5 ${copy.inSel(ri, 1) ? '!bg-brand/20' : ''}`}>
                     {r.bank_name || '—'}
                   </td>
 
-                  <td className="td !px-2 !py-1.5 !whitespace-normal">
+                  <td className={`td select-none !px-2 !py-1.5 !whitespace-normal ${copy.inSel(ri, 2) ? '!bg-brand/20' : ''}`}>
                     {r.description || '—'}
                   </td>
 
-                  <td className="td !px-2 !py-1.5 text-right tabular-nums font-medium">
+                  <td className={`td select-none !px-2 !py-1.5 text-right tabular-nums font-medium ${copy.inSel(ri, 3) ? '!bg-brand/20' : ''}`}>
                     {money(r.amount)}
                   </td>
 
-                  <td className="td !px-2 !py-1.5">
+                  <td className={`td select-none !px-2 !py-1.5 ${copy.inSel(ri, 4) ? '!bg-brand/20' : ''}`}>
                     {r.invoice_number || '—'}
                   </td>
 
-                  <td className="td !px-2 !py-1.5">
+                  <td className={`td select-none !px-2 !py-1.5 ${copy.inSel(ri, 5) ? '!bg-brand/20' : ''}`}>
                     {r.client_name || '—'}
                   </td>
 
@@ -171,6 +180,12 @@ export default function BankMovements() {
               ))}
             </tbody>
           </table></div>
+        )}
+        {copy.sum.count > 0 && (
+          <div role="status" className="fixed bottom-3 left-1/2 z-40 flex -translate-x-1/2 flex-wrap items-center justify-center gap-x-4 gap-y-0.5 rounded-full border border-line bg-surface px-4 py-1.5 text-xs text-muted shadow-lg">
+            <span>{copy.sum.count} {copy.sum.count === 1 ? 'celda numérica' : 'celdas numéricas'}</span>
+            <span className="font-semibold text-fg tabular-nums">Suma: {money(copy.sum.total)} COP</span>
+          </div>
         )}
       </div>
       <DeleteDialog open={!!del} title="Eliminar movimiento bancario" busy={delBusy} error={delError} onCancel={() => setDel(null)} onConfirm={confirmDelete}>

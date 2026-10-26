@@ -18,7 +18,7 @@ export function billingSummary(r: OperationRow): string {
       const tickets = [...new Set([clean(d.ticket_number), ...d.passengers.map(p => clean(p.ticket_number))].filter(Boolean))]
       const value = d.total_invoice != null ? peso(d.total_invoice) : charge
       return join([
-        [names.length > 1 ? 'Pasajeros' : 'Pasajero', names.filter(Boolean).join(', ')], ['Ruta', clean(d.route)],
+        [names.length > 1 ? 'Pasajeros' : 'Pasajero', names.filter(Boolean).join(', ')], ['Ruta', clean(d.route)], ['Aerolínea', clean(d.airline)],
         ['Fecha', dmy(d.departure_date || d.segments[0]?.departure_date)], ['Regreso', dmy(d.return_date)],
         ['Tiquete', tickets.join(', ')], ['Reserva', clean(d.booking_code)], ['Valor', value],
       ])
