@@ -91,7 +91,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', tick) }
   }, [id, load])
   useEffect(() => { const el = area.current; if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 128)}px` } }, [text])
-  useEffect(() => { const n = full?.messages.length ?? 0; if (n !== lastCount.current) { lastCount.current = n; bottom.current?.scrollIntoView({ block: 'end' }) } }, [full?.messages.length])
+  useEffect(() => { const n = full?.messages.length ?? 0; if (n !== lastCount.current) { lastCount.current = n; { const el = bottom.current; if (el) el.scrollTop = el.scrollHeight } } }, [full?.messages.length])
 
   const cleanupNote = (r: CleanupResult) => { if (r.pending > 0) setNotice(`Se eliminó de la base de datos, pero ${r.pending} archivo(s) siguen pendientes de borrarse del almacenamiento. Se reintentará automáticamente; también puedes reintentar desde la bandeja.`) }
 
@@ -225,7 +225,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
             )}
 
             <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Conversación</h3>
-              <div className="space-y-3 rounded-lg border border-line p-3">
+              <div ref={bottom} className="max-h-[60dvh] space-y-3 overflow-y-auto rounded-lg border border-line p-3">
                 {full.messages.length === 0 && <p className="py-4 text-center text-sm text-muted">Aún no hay mensajes.</p>}
                 {full.messages.map(m => (
                   <div key={m.id} className={`flex ${m.author === 'agency' ? 'justify-end' : 'justify-start'}`}>
@@ -236,7 +236,6 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
                       {full.attachments.some(a => a.message_id === m.id) && <ul className="mt-2 space-y-1 text-fg">{full.attachments.filter(a => a.message_id === m.id).map(a => attBtn(a, true))}</ul>}
                     </div>
                   </div>))}
-                <div ref={bottom} />
               </div>
               {closed ? <p className="mt-3 flex items-center gap-2 rounded-lg bg-surface2 p-3 text-sm"><Lock size={14} />Conversación cerrada. Reábrela para volver a responder.</p> : (
                 <form onSubmit={send} className="mt-3 space-y-2">
