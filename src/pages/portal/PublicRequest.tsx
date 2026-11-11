@@ -110,7 +110,7 @@ export default function PublicRequest() {
   if (state === 'invalid') return <Notice title="Enlace no válido" text="Este enlace no es válido o ha sido desactivado. Contacta a la agencia para recibir uno nuevo." />
   if (state === 'error' || !data) return <Shell><div className="card p-8 text-center"><p className="text-sm text-red-500" role="alert">{loadError}</p><button className="btn-primary mt-4" onClick={() => { setState('loading'); load() }}>Reintentar</button></div></Shell>
   if (!submitted) return (
-    <Shell fill={chat}>
+    <Shell>
       {/* The form stays mounted once opened (hidden, not unmounted): nothing the client typed is lost. */}
       {!chat && (
         <section className="card portal-fade overflow-hidden text-center" aria-label="Elegir cómo continuar">
@@ -158,7 +158,7 @@ export default function PublicRequest() {
       {chat && <Conversation token={token} data={data} reload={load} onBack={() => setChat(false)} />}
     </Shell>
   )
-  return <Shell fill><Conversation token={token} data={data} reload={load} /></Shell>
+  return <Shell><Conversation token={token} data={data} reload={load} /></Shell>
 }
 
 function Conversation({ token, data, reload, onBack }: { token: string; data: PortalData; reload: (quiet?: boolean) => Promise<void>; onBack?: () => void }) {
@@ -176,25 +176,30 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
   const [form, setForm] = useState<null | 'main' | 'add' | PortalItem>(null)
   const input = useRef<HTMLInputElement>(null)
   const area = useRef<HTMLTextAreaElement>(null)
-  const list = useRef<HTMLDivElement>(null)
   const content = useRef<HTMLDivElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const listNear = useRef(true)
   const nearBottom = useRef(true)
 
   // The composer grows with the text (like WhatsApp) up to its max height, then scrolls inside.
   useEffect(() => { const el = area.current; if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 128)}px` } }, [text])
-  const trackScroll = () => {
-    const el = list.current
-    if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-  }
+  const atBottom = () => document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 160
+  useEffect(() => {
+    const onScroll = () => { nearBottom.current = atBottom() }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  const trackList = () => { const el = list.current; if (el) listNear.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80 }
   useEffect(() => {
     const el = list.current
-    if (el && nearBottom.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    if (el && listNear.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    if (nearBottom.current) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
   }, [messages])
   // Attachments/images change the content height without changing the message list: keep the tail pinned if the user is at the bottom.
   useEffect(() => {
-    const el = list.current, inner = content.current
-    if (!el || !inner || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => { if (nearBottom.current) el.scrollTop = el.scrollHeight })
+    const inner = content.current
+    if (!inner || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { const el = list.current; if (el && listNear.current) el.scrollTop = el.scrollHeight; if (nearBottom.current) window.scrollTo({ top: document.documentElement.scrollHeight }) })
     ro.observe(inner)
     return () => ro.disconnect()
   }, [])
@@ -220,7 +225,7 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
     e.preventDefault()
     if (busy || (!text.trim() && !files.length)) return
     setBusy(true); setError(''); setSent(false)
-    try { await portalApi.message(token, text.trim(), files); setText(''); setFiles([]); setSent(true); nearBottom.current = true; await reload(true); setTimeout(() => setSent(false), 2500) }
+    try { await portalApi.message(token, text.trim(), files); setText(''); setFiles([]); setSent(true); nearBottom.current = true; listNear.current = true; await reload(true); setTimeout(() => setSent(false), 2500) }
     catch (err) { setError(err instanceof Error ? err.message : 'No se pudo enviar el mensaje.'); if (err instanceof PortalError && err.status === 409) reload(true) } finally { setBusy(false) }
   }
 
@@ -233,8 +238,8 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
   if (form) return <div className="min-h-0 flex-1 overflow-y-auto"><PortalForm token={token} initial={form} existing={form.passengers} mode="edit-item" itemId={form.id} onCancel={() => setForm(null)} onDone={async () => { setForm(null); await reload(true) }} /></div>
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <section className="card portal-fade max-h-[38dvh] shrink-0 overflow-y-auto p-4 sm:p-5">
+    <div className="flex flex-col gap-3">
+      <section className="card portal-fade shrink-0 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="flex items-center gap-2 text-lg font-semibold">
             {onBack && <button type="button" onClick={onBack} aria-label="Volver al formulario" title="Volver al formulario" className="grid h-7 w-7 place-items-center rounded-full border border-line text-muted transition hover:text-brand"><ArrowLeft size={14} /></button>}
@@ -263,7 +268,7 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
         </details>}
       </section>
 
-      <section className="card portal-fade max-h-[30dvh] shrink-0 overflow-y-auto p-4 sm:p-5" aria-label="Requerimientos">
+      <section className="card portal-fade shrink-0 p-4 sm:p-5" aria-label="Requerimientos">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Tus requerimientos</h2>
           {!closed && <button type="button" className="btn-ghost !py-1 text-xs" onClick={() => setForm('add')}><Plus size={12} />Agregar otro</button>}
@@ -291,9 +296,9 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
         </ul>
       </section>
 
-      <section className="card portal-fade flex min-h-0 flex-1 flex-col p-3 sm:p-4" aria-label="Conversación">
+      <section className="card portal-fade flex min-h-[60dvh] flex-col p-3 sm:p-4" aria-label="Conversación">
         <h2 className="mb-2 shrink-0 text-sm font-semibold">Conversación con la agencia</h2>
-        <div ref={list} onScroll={trackScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1" aria-live="polite">
+        <div ref={list} onScroll={trackList} className="max-h-[65dvh] flex-1 overflow-y-auto pb-3 pr-1" aria-live="polite">
           <div ref={content} className="space-y-3">
             {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">{r.client_name.trim() ? `Hola, ${r.client_name.trim().split(' ')[0]}. ` : 'Hola. '}{r.submitted_at ? 'Tu solicitud fue enviada. La agencia te responderá aquí.' : 'Escríbenos lo que necesitas: la agencia te responderá en este mismo chat.'}</p>}
             {messages.map(m => (
@@ -312,7 +317,7 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
           <div role="status" className="mt-3 flex shrink-0 items-start gap-2 rounded-lg border border-line bg-surface2 p-3 text-sm"><Lock size={16} className="mt-0.5 shrink-0 text-muted" />
             <p>Esta conversación está cerrada y ya no se pueden enviar mensajes ni archivos. Si necesitas continuar, contacta a la agencia.</p></div>
         ) : (
-          <form onSubmit={send} className="mt-3 shrink-0 space-y-2 border-t border-line pt-3">
+          <form onSubmit={send} className="sticky bottom-0 z-10 mt-3 shrink-0 space-y-2 border-t border-line bg-surface pb-1 pt-3">
             <PendingFiles files={files} disabled={busy} onRemove={i => setFiles(x => x.filter((_, j) => j !== i))} />
             {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
             {sent && <p role="status" className="text-xs text-emerald-600 dark:text-emerald-400">Mensaje enviado.</p>}
