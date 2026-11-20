@@ -34,10 +34,10 @@ export default function Reports() {
         <>
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">{cards!.map(([k, v]) => <div key={k} className="card p-4"><p className="text-xs text-muted font-medium">{k}</p><p className="mt-2 text-xl font-semibold tabular-nums">{v}</p></div>)}</div>
           <div className="grid gap-4 mt-4 lg:grid-cols-2">
-            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Distribución por servicio</h2><DonutChart data={data.by_type} /></section>
-            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Valor por empresa</h2><BarList data={data.by_company} /></section>
-            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Valor por aerolínea / proveedor</h2><BarList data={data.by_provider.slice(0, 8)} /></section>
-            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Evolución mensual</h2><BarList data={data.by_month.map(m => ({ ...m, label: monthLabel(m.key) }))} /></section>
+            <section className="card p-5 flex flex-col"><h2 className="font-semibold text-sm mb-4">Distribución por servicio</h2><div className="flex flex-1 items-center"><div className="w-full"><DonutChart data={data.by_type} /></div></div></section>
+            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Valor por empresa</h2><div className="max-h-72 overflow-y-auto overscroll-contain pr-2"><BarList data={data.by_company} /></div></section>
+            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Valor por aerolínea / proveedor</h2><div className="max-h-72 overflow-y-auto overscroll-contain pr-2"><BarList data={data.by_provider.slice(0, 8)} /></div></section>
+            <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Evolución mensual</h2><div className="max-h-72 overflow-y-auto overscroll-contain pr-2"><BarList data={data.by_month.map(m => ({ ...m, label: monthLabel(m.key) }))} /></div></section>
           </div>
         </>
       )}
