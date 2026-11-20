@@ -16,6 +16,7 @@ import BankMovements from './pages/BankMovements'
 import Suppliers from './pages/Suppliers'
 import SettingsPage from './pages/Settings'
 import ClientRequests from './pages/ClientRequests'
+import Leases from './pages/Leases'
 
 // Public portal: outside AuthProvider on purpose (the visitor never touches the agency's session) and lazy-loaded.
 const PublicRequest = lazy(() => import('./pages/portal/PublicRequest'))
@@ -53,6 +54,7 @@ function AppRoutes() {
           <Route path={SECTIONS.transport.path + "/nuevo"} element={<NewOperation key="transport" section="transport" />} />
           <Route path={SECTIONS.other.path} element={<Records key="other" section="other" />} />
           <Route path={SECTIONS.other.path + "/nuevo"} element={<NewOperation key="other" section="other" />} />
+          <Route path="/arrendamientos" element={<Leases />} />
           <Route path="/empresas" element={<Companies />} />
           <Route path="/proveedores-tarjetas" element={<Suppliers />} />
           <Route path="/proveedores" element={<Navigate to="/proveedores-tarjetas" replace />} />

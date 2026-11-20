@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
-import { Bell, BellOff, Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
+import { Bell, BellOff, Building, Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
 import { refreshAll, useAppUpdate, useAsync, useAuth, useTheme } from '../hooks'
 import { dataService } from '../services'
 import { enablePush, pushState, syncPush, type PushState } from '../lib/push'
@@ -11,7 +11,7 @@ import { AgencyLogo, Loading, MobileLogo, PoweredBy, ThemeSwitch } from './ui'
 
 const groups = [
   { title: 'General', items: [{ to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard }, { to: '/registros', label: 'Registros', icon: ListChecks }, { to: '/solicitudes', label: 'Solicitudes de clientes', icon: MessageSquare }] },
-  { title: 'Operaciones', items: [{ to: '/vuelos', label: 'Vuelos', icon: Plane }, { to: '/hoteles', label: 'Hoteles', icon: BedDouble }, { to: '/prestamos', label: 'Préstamos', icon: HandCoins }, { to: '/alimentacion', label: 'Alimentación', icon: Utensils }, { to: '/transporte', label: 'Transporte', icon: Bus }, { to: '/otros', label: 'Servicios adicionales', icon: Sparkles }] },
+  { title: 'Operaciones', items: [{ to: '/vuelos', label: 'Vuelos', icon: Plane }, { to: '/hoteles', label: 'Hoteles', icon: BedDouble }, { to: '/prestamos', label: 'Préstamos', icon: HandCoins }, { to: '/alimentacion', label: 'Alimentación', icon: Utensils }, { to: '/transporte', label: 'Transporte', icon: Bus }, { to: '/otros', label: 'Servicios adicionales', icon: Sparkles }, { to: '/arrendamientos', label: 'Arrendamientos', icon: Building }] },
   { title: 'Administrar', items: [{ to: '/empresas', label: 'Empresas', icon: Building2 }, { to: '/proveedores-tarjetas', label: 'Proveedores y tarjetas', icon: CreditCard }, { to: '/reportes', label: 'Reportes', icon: BarChart3 }, { to: '/movimientos-bancarios', label: 'Banco', icon: Landmark }] },
 ]
 

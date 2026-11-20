@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, FileDown, Plus, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FileDown, FileSpreadsheet, Plus, X } from 'lucide-react'
 import airesDay from '../assets/aires-day.png'
 import { fdate, SERVICE_LABEL } from '../lib/format'
 import { buildTables, defaultColumns, GROUP_TITLE, presentGroups, REPORT_COLUMNS } from '../lib/reportColumns'
+import { downloadReportExcel } from '../lib/reportExcel'
 import { downloadReportPdf, imageToDataUrl } from '../lib/reportPdf'
 import { dataService } from '../services'
 import type { OperationFilters, OperationRow } from '../types'
@@ -16,6 +17,7 @@ export default function ReportBuilder({ open, onClose, filters, companyName }: {
   const [selected, setSelected] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
+  const [fmt, setFmt] = useState<'pdf' | 'xlsx'>('pdf')
   const fkey = JSON.stringify(filters)
 
   const client = filters.company_id ? companyName ?? 'Cliente seleccionado' : 'Todos los clientes'
@@ -40,15 +42,14 @@ export default function ReportBuilder({ open, onClose, filters, companyName }: {
   const label = (k: string) => REPORT_COLUMNS.find(c => c.key === k)
   const move = (i: number, d: number) => setSelected(s => { const n = [...s]; const j = i + d; if (j < 0 || j >= n.length) return s; [n[i], n[j]] = [n[j], n[i]]; return n })
 
-  const generate = async () => {
-    setBusy(true); setError('')
+  const generate = async (format: 'pdf' | 'xlsx' = 'pdf') => {
+    setBusy(true); setError(''); setFmt(format)
     try {
-      const logo = await imageToDataUrl(airesDay).catch(() => undefined)
       const day = new Date().toISOString().slice(0, 10)
-      await downloadReportPdf(
-        { title: title.trim() || defaultTitle, client, period, extra, generatedAt: new Date().toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' }) },
-        tables, logo, `informe-${slug(filters.company_id ? client : 'general')}-${day}.pdf`,
-      )
+      const meta = { title: title.trim() || defaultTitle, client, period, extra, generatedAt: new Date().toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' }) }
+      const base = `informe-${slug(filters.company_id ? client : 'general')}-${day}`
+      if (format === 'xlsx') await downloadReportExcel(meta, tables, `${base}.xlsx`)
+      else await downloadReportPdf(meta, tables, await imageToDataUrl(airesDay).catch(() => undefined), `${base}.pdf`)
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo generar el informe') }
     finally { setBusy(false) }
   }
@@ -117,7 +118,10 @@ export default function ReportBuilder({ open, onClose, filters, companyName }: {
           </section>
 
           {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
-          <button type="button" className="btn-primary w-full" disabled={busy || selected.length === 0} onClick={generate}>{busy ? <Spinner /> : <FileDown size={16} />}Generar y descargar PDF</button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button type="button" className="btn-primary w-full" disabled={busy || selected.length === 0} onClick={() => generate('pdf')}>{busy && fmt === 'pdf' ? <Spinner /> : <FileDown size={16} />}Generar y descargar PDF</button>
+            <button type="button" className="btn-ghost w-full border border-line" disabled={busy || selected.length === 0} onClick={() => generate('xlsx')}>{busy && fmt === 'xlsx' ? <Spinner /> : <FileSpreadsheet size={16} />}Descargar en Excel (.xlsx)</button>
+          </div>
         </div>
       )}
     </Drawer>

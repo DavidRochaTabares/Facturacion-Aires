@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { FileDown, RotateCcw, Search } from 'lucide-react'
+import { FileDown, FileSpreadsheet, RotateCcw, Search } from 'lucide-react'
 import airesDay from '../assets/aires-day.png'
 import { fdate, money, MONTHS } from '../lib/format'
 import { PERSONAL_CATEGORIES, PERSONAL_KIND_LABEL, PERSONAL_METHODS } from '../lib/service'
 import type { ReportColumn, ReportTable } from '../lib/reportColumns'
+import { downloadReportExcel } from '../lib/reportExcel'
 import { downloadReportPdf, imageToDataUrl } from '../lib/reportPdf'
 import { dataService } from '../services'
 import type { BankMovementRow, PersonalMovementRow } from '../types'
@@ -43,6 +44,7 @@ export default function BankReportBuilder() {
   const [pf, setPf] = useState<PersonalF>({ kind: '', category: '', method: '', text: '', min: '', max: '' })
   const [secs, setSecs] = useState<string[]>(['summary', 'detail'])
   const [busy, setBusy] = useState(false)
+  const [fmt, setFmt] = useState<'pdf' | 'xlsx'>('pdf')
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<{ agency: BankMovementRow[]; personal: PersonalMovementRow[] } | null>(null)
 
@@ -159,18 +161,16 @@ export default function BankReportBuilder() {
     return t
   }
 
-  const generate = async () => {
+  const generate = async (format: 'pdf' | 'xlsx' = 'pdf') => {
     const list = tables()
     if (!list.length) { setError('Selecciona al menos una sección con contenido.'); return }
-    setBusy(true); setError('')
+    setBusy(true); setError(''); setFmt(format)
     try {
-      const logo = await imageToDataUrl(airesDay).catch(() => undefined)
       const day = new Date().toISOString().slice(0, 10)
       const name = origin === 'agency' ? 'Agencia' : origin === 'personal' ? 'Movimientos_Personales' : 'Agencia_y_Personales'
-      await downloadReportPdf(
-        { title: `Informe de movimientos - ${origin === 'agency' ? 'agencia' : origin === 'personal' ? 'personales' : 'agencia y personales'}`, client: 'Bancos', period: period.label, extra: filterDesc, generatedAt: new Date().toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' }) },
-        list, logo, `Informe_Bancos_${name}_${day}.pdf`,
-      )
+      const meta = { title: `Informe de movimientos - ${origin === 'agency' ? 'agencia' : origin === 'personal' ? 'personales' : 'agencia y personales'}`, client: 'Bancos', period: period.label, extra: filterDesc, generatedAt: new Date().toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short' }) }
+      if (format === 'xlsx') await downloadReportExcel(meta, list, `Informe_Bancos_${name}_${day}.xlsx`)
+      else await downloadReportPdf(meta, list, await imageToDataUrl(airesDay).catch(() => undefined), `Informe_Bancos_${name}_${day}.pdf`)
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo generar el informe.') }
     finally { setBusy(false) }
   }
@@ -291,7 +291,10 @@ export default function BankReportBuilder() {
                 </table>
               </div>
               {(origin !== 'personal' ? pAg : pPe).length > 8 && <p className="text-xs text-muted">Mostrando 8 de {(origin !== 'personal' ? pAg : pPe).length}. El PDF incluye todos.</p>}
-              <button type="button" className="btn-primary w-full" disabled={busy} onClick={generate}>{busy ? <Spinner /> : <FileDown size={16} />}Generar y descargar PDF</button>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button type="button" className="btn-primary w-full" disabled={busy} onClick={() => generate('pdf')}>{busy && fmt === 'pdf' ? <Spinner /> : <FileDown size={16} />}Generar y descargar PDF</button>
+                <button type="button" className="btn-ghost w-full border border-line" disabled={busy} onClick={() => generate('xlsx')}>{busy && fmt === 'xlsx' ? <Spinner /> : <FileSpreadsheet size={16} />}Descargar en Excel (.xlsx)</button>
+              </div>
             </>
           )}
         </div>
