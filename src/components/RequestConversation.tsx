@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Copy, KeyRound, Lock, LockOpen, MessageCircle, Paperclip, Send, Trash2, Unlink } from 'lucide-react'
 import { copyText } from '../lib/clipboard'
+import { companyAccessAdmin } from '../services/companyPortal'
 import { requestsService, type CleanupResult } from '../services/requests'
 import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment } from '../types/requests'
 import { ApprovalPanel } from './ApprovalPanel'
@@ -27,12 +28,16 @@ type Action =
   | { kind: 'del-message'; id: string } | { kind: 'del-attachment'; id: string; name: string } | { kind: 'del-passenger'; id: string; name: string }
 
 /** Modal that shows a freshly generated link. The token is not stored anywhere readable: this is the only time it can be copied. */
-export function LinkModal({ link, onClose }: { link: { token: string; name: string } | null; onClose: () => void }) {
+export function LinkModal({ link, onClose }: { link: { token: string; name: string; company?: string } | null; onClose: () => void }) {
   const [state, setState] = useState<'idle' | 'ok' | 'error'>('idle')
-  const url = link ? requestsService.link(link.token) : ''
+  const company = link?.company ?? ''
+  const url = link ? (company ? companyAccessAdmin.link(link.token) : requestsService.link(link.token)) : ''
   const name = link?.name.trim() ?? ''
   // Official WhatsApp share mechanism: opens the app/tab with the message ready to send (nothing is sent automatically).
-  const waText = name
+  const waText = company
+    ? `Te compartimos el enlace de ${company} para que registres tus requerimientos con Aires y Destinos: ${url}
+Escribe tu nombre para iniciar la conversación; desde allí podrás usar el chat o el formulario y adjuntar los documentos necesarios.`
+    : name
     ? `Hola, ${name}. Te compartimos este enlace para que puedas registrar tus requerimientos con Aires y Destinos: ${url}\nDesde allí podrás ingresar la información y adjuntar los documentos necesarios.`
     : `Te compartimos este enlace para que puedas registrar tus requerimientos con Aires y Destinos: ${url}\nDesde allí podrás ingresar la información y adjuntar los documentos necesarios.`
   const wa = `https://wa.me/?text=${encodeURIComponent(waText)}`
@@ -40,14 +45,15 @@ export function LinkModal({ link, onClose }: { link: { token: string; name: stri
   return (
     <Modal open={!!link} onClose={onClose} title="Enlace privado generado">
       <div className="space-y-3 text-sm">
-        <p>Envía este enlace {name ? <>a <b>{name}</b></> : 'al cliente'} por WhatsApp, correo u otro medio. El cliente completará sus datos y elegirá qué necesita. Solo quien tenga el enlace puede abrir esta conversación.</p>
+        {company ? <p>Este es el enlace de <b>{company}</b>. Envíalo a los empleados por WhatsApp, correo u otro medio: cada empleado escribe su nombre e inicia su propia conversación (chat y formulario). Puedes generar todos los enlaces que necesites; los anteriores siguen funcionando.</p>
+          : <p>Envía este enlace {name ? <>a <b>{name}</b></> : 'al cliente'} por WhatsApp, correo u otro medio. El cliente completará sus datos y elegirá qué necesita. Solo quien tenga el enlace puede abrir esta conversación.</p>}
         <input className="input font-mono text-xs" readOnly value={url} onFocus={e => e.target.select()} aria-label="Enlace privado" />
         <div className="flex flex-wrap items-center gap-3">
           <button type="button" className="btn-primary" onClick={async () => { try { await copyText(url); setState('ok') } catch { setState('error') } }}><Copy size={14} />Copiar enlace</button>
           <a href={wa} target="_blank" rel="noreferrer" className="btn-ghost"><MessageCircle size={14} />Compartir por WhatsApp</a>
           <span role="status" className={state === 'error' ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}>{state === 'ok' && 'Enlace copiado.'}{state === 'error' && 'No se pudo copiar. Selecciónalo y cópialo manualmente.'}</span>
         </div>
-        <p className="rounded-lg bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">Por seguridad el enlace se muestra solo ahora (en la base de datos se guarda únicamente su huella). Si lo pierdes, usa «Regenerar enlace»: el anterior dejará de funcionar.</p>
+        <p className="rounded-lg bg-amber-500/10 p-3 text-amber-700 dark:text-amber-300">Por seguridad el enlace se muestra solo ahora (en la base de datos se guarda únicamente su huella). {company ? 'Si lo pierdes, genera uno nuevo desde «Generar enlace».' : 'Si lo pierdes, usa «Regenerar enlace»: el anterior dejará de funcionar.'}</p>
         <div className="flex justify-end"><button className="btn-ghost" onClick={onClose}>Cerrar</button></div>
       </div>
     </Modal>

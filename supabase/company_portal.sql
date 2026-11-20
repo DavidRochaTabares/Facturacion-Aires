@@ -30,7 +30,9 @@ create table if not exists public.company_links (
   revoked_at timestamptz,
   revoked_by uuid references auth.users (id) on delete set null
 );
-create unique index if not exists company_links_one_active on public.company_links (company_id) where revoked_at is null;
+-- Una empresa puede tener varios enlaces activos a la vez (cada «Generar enlace» crea uno nuevo sin invalidar los anteriores ya compartidos).
+drop index if exists public.company_links_one_active;
+create index if not exists company_links_company_idx on public.company_links (company_id) where revoked_at is null;
 
 create table if not exists public.company_admins (
   user_id uuid primary key references auth.users (id) on delete cascade,
@@ -162,7 +164,7 @@ drop trigger if exists client_request_items_reopen on public.client_request_item
 create trigger client_request_items_reopen after insert on public.client_request_items for each row execute function public.cr_reopen_on_new_item();
 
 -- 8. Funciones de la AGENCIA (rol authenticated; exigen is_agency_user) --------------------------------------------------------------------------------
--- Genera el enlace público de la empresa (revoca el activo anterior). El token solo se devuelve aquí: en la base queda únicamente su hash.
+-- Genera un enlace público nuevo de la empresa (los anteriores siguen activos hasta revocarlos). El token solo se devuelve aquí: en la base queda únicamente su hash.
 create or replace function public.company_link_generate(p_company uuid) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare v_token text := public.cr_new_token(); v_user uuid := auth.uid();
@@ -170,7 +172,6 @@ begin
   if not public.is_agency_user() then raise exception 'Acceso no autorizado.' using errcode = '42501'; end if;
   perform 1 from public.companies where id = p_company for update;
   if not found then raise exception 'La empresa no existe.'; end if;
-  update public.company_links set revoked_at = now(), revoked_by = v_user where company_id = p_company and revoked_at is null;
   insert into public.company_links (company_id, token_hash, created_by) values (p_company, public.cr_hash(v_token), v_user);
   return jsonb_build_object('token', v_token);
 end;
@@ -181,7 +182,7 @@ language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_agency_user() then raise exception 'Acceso no autorizado.' using errcode = '42501'; end if;
   update public.company_links set revoked_at = now(), revoked_by = auth.uid() where company_id = p_company and revoked_at is null;
-  if not found then raise exception 'La empresa no tiene un enlace activo.'; end if;
+  if not found then raise exception 'La empresa no tiene enlaces activos.'; end if;
 end;
 $$;
 

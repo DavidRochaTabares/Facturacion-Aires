@@ -48,13 +48,13 @@ export const companyAccessAdmin = {
 
   async status(companyId: string): Promise<CompanyAccessStatus> {
     const [l, a] = await Promise.all([
-      supabase.from('company_links').select('id,created_at,revoked_at').eq('company_id', companyId).order('created_at', { ascending: false }).limit(1),
+      supabase.from('company_links').select('id,created_at').eq('company_id', companyId).is('revoked_at', null).order('created_at', { ascending: false }),
       supabase.from('company_admins').select('email,active,created_at').eq('company_id', companyId).maybeSingle(),
     ])
     if (l.error) fail(l.error)
     if (a.error) fail(a.error)
-    const last = l.data?.[0]
-    return { link_active: !!last && last.revoked_at == null, link_issued_at: last?.created_at ?? null, admin: a.data ?? null }
+    const active = l.data ?? []
+    return { link_active: active.length > 0, links_active: active.length, link_issued_at: active[0]?.created_at ?? null, admin: a.data ?? null }
   },
   async generateLink(companyId: string): Promise<string> {
     const { data, error } = await supabase.rpc('company_link_generate', { p_company: companyId })

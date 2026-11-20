@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Copy, KeyRound, MessageCircle, UserCheck, UserPlus, UserX } from 'lucide-react'
+import { Copy, KeyRound, MessageCircle, Unlink, UserCheck, UserPlus, UserX } from 'lucide-react'
 import { copyText } from '../lib/clipboard'
 import { companyAccessAdmin } from '../services/companyPortal'
 import type { CompanyAccessStatus } from '../types/company'
@@ -26,7 +26,7 @@ function Secret({ label, url, whatsapp, hint }: { label: string; url: string; wh
   )
 }
 
-type Confirm = 'disable' | 'enable' | 'reset' | null
+type Confirm = 'revoke' | 'disable' | 'enable' | 'reset' | null
 
 /** Agency panel to manage a company's public employee link and its single enterprise administrator. */
 export function CompanyAccessPanel({ company, onClose }: { company: Company | null; onClose: () => void }) {
@@ -55,6 +55,7 @@ export function CompanyAccessPanel({ company, onClose }: { company: Company | nu
   const createAdmin = (e: FormEvent) => { e.preventDefault(); if (!id || !email.trim()) return; run(async () => { const r = await companyAccessAdmin.createAdmin(id, email.trim()); setSetupUrl(r.link ?? ''); if (!r.link) setError('El administrador se creó, pero no se pudo generar el enlace de acceso. Usa «Restablecer acceso».'); setEmail('') }) }
 
   const confirmCfg: Record<Exclude<Confirm, null>, { title: string; label: string; danger: boolean; body: string; act: () => Promise<void> }> = {
+    revoke: { title: 'Revocar enlaces de empleados', label: 'Revocar enlaces', danger: true, body: 'Todos los enlaces activos de la empresa dejarán de funcionar de inmediato: nadie podrá iniciar nuevas conversaciones con ellos. Las conversaciones existentes y su historial se conservan.', act: async () => { await companyAccessAdmin.revokeLink(id!) } },
     disable: { title: 'Desactivar administrador', label: 'Desactivar acceso', danger: true, body: 'El administrador no podrá iniciar sesión ni consultar el portal hasta que lo habilites de nuevo. Su historial de aprobaciones se conserva.', act: async () => { await companyAccessAdmin.setActive(id!, false) } },
     enable: { title: 'Habilitar administrador', label: 'Habilitar acceso', danger: false, body: 'El administrador podrá volver a iniciar sesión en el portal empresarial.', act: async () => { await companyAccessAdmin.setActive(id!, true) } },
     reset: { title: 'Restablecer acceso', label: 'Generar enlace de acceso', danger: false, body: 'Se generará un enlace seguro de un solo uso para que el administrador defina una nueva contraseña.', act: async () => { setSetupUrl((await companyAccessAdmin.resetAdmin(id!)).link) } },
@@ -69,6 +70,12 @@ export function CompanyAccessPanel({ company, onClose }: { company: Company | nu
         {!status ? (error ? <p role="alert" className="text-sm text-red-500">{error}</p> : <Loading />) : (
           <div className="space-y-5 text-sm">
             {error && <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-red-600 dark:text-red-400">{error}</p>}
+
+            <section className="space-y-2"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Enlaces de empleados</h3>
+              <p className="text-muted">Se generan desde <b>Solicitudes de clientes → Generar enlace</b> eligiendo esta empresa.</p>
+              <p>Enlaces activos: <b>{status.links_active}</b></p>
+              {status.link_active && <button className="btn-ghost text-red-600 dark:text-red-400" disabled={busy} onClick={() => { setConfirmError(''); setConfirm('revoke') }}><Unlink size={14} />Revocar todos los enlaces</button>}
+            </section>
 
             <section className="space-y-2"><h3 className="text-xs font-semibold uppercase tracking-wide text-muted">Administrador de la empresa</h3>
               {!admin ? (

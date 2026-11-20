@@ -3,6 +3,8 @@ import { FilterX, Link2, MessageSquare } from 'lucide-react'
 import RequestConversation, { LinkModal } from '../components/RequestConversation'
 import { Empty, FilterBar, Loading, Modal, PageHeader, Select, Spinner } from '../components/ui'
 import { refreshAll, useAsync, useDebounced } from '../hooks'
+import { dataService } from '../services'
+import { companyAccessAdmin } from '../services/companyPortal'
 import { requestsService, type RequestFilters } from '../services/requests'
 import { APPROVAL_CLS, APPROVAL_LABEL, type ApprovalStatus } from '../types/company'
 import { displayStatus, REQUEST_TYPE_LABEL, STATUS_FILTERS, typeLabel, type ClientRequestRow, type RequestType } from '../types/requests'
@@ -26,7 +28,9 @@ export default function ClientRequests() {
   const [genOpen, setGenOpen] = useState(false)
   const [genName, setGenName] = useState('')
   const [genError, setGenError] = useState('')
-  const [link, setLink] = useState<{ token: string; name: string } | null>(null)
+  const [link, setLink] = useState<{ token: string; name: string; company?: string } | null>(null)
+  const [genCompany, setGenCompany] = useState('')
+  const { data: companies } = useAsync(() => dataService.getCompanies().catch(() => []), [])
   const [retrying, setRetrying] = useState(false)
   const set = (k: keyof RequestFilters) => (e: { target: { value: string } }) => setF(p => ({ ...p, [k]: e.target.value }))
 
@@ -40,7 +44,12 @@ export default function ClientRequests() {
   // Creates an empty conversation + private link; the optional name is stored on the request so the portal can greet the client.
   const generate = async () => {
     setGenerating(true); setGenError('')
-    try { const r = await requestsService.create(genName); setLink({ token: r.token, name: genName.trim() }); setGenOpen(false); setGenName(''); reload() }
+    try {
+      if (genCompany) {
+        const company = companies?.find(c => c.id === genCompany)?.name ?? ''
+        setLink({ token: await companyAccessAdmin.generateLink(genCompany), name: '', company }); setGenOpen(false); setGenCompany('')
+      } else { const r = await requestsService.create(genName); setLink({ token: r.token, name: genName.trim() }); setGenOpen(false); setGenName(''); reload() }
+    }
     catch (e) { setGenError(e instanceof Error ? e.message : 'No se pudo generar el enlace.') } finally { setGenerating(false) }
   }
   const retry = async () => { setRetrying(true); try { await requestsService.processCleanup() } finally { setRetrying(false); reloadPending() } }
@@ -51,10 +60,21 @@ export default function ClientRequests() {
       <PageHeader title="Solicitudes de clientes" subtitle={`${rows.length} conversaciones`} actions={<button className="btn-primary" onClick={() => { setGenError(''); setGenOpen(true) }}><Link2 size={16} />Generar enlace</button>} />
       <Modal open={genOpen} onClose={() => setGenOpen(false)} title="Generar enlace de solicitud">
         <form className="space-y-3 text-sm" onSubmit={e => { e.preventDefault(); generate() }}>
-          <p className="text-muted">Se creará una conversación vacía con un enlace privado. El cliente completará sus datos y elegirá qué necesita.</p>
-          <label className="label" htmlFor="gen-name">Nombre del cliente (opcional)</label>
-          <input id="gen-name" className="input" value={genName} maxLength={160} onChange={e => setGenName(e.target.value)} placeholder="Ej.: Carlos Pérez" autoComplete="off" />
-          <p className="text-xs text-muted">Si lo escribes, el portal saludará al cliente por su nombre y el mensaje de WhatsApp lo incluirá.</p>
+          <label className="label" htmlFor="gen-company">¿Para qué empresa es el enlace?</label>
+          <Select id="gen-company" value={genCompany} onChange={e => setGenCompany(e.target.value)}>
+            <option value="">Cliente sin empresa</option>
+            {(companies ?? []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </Select>
+          {genCompany ? (
+            <p className="text-muted">Se generará el enlace de la empresa. Cada empleado escribirá su nombre al abrirlo y tendrá su propia conversación con chat y formulario; la empresa aprueba o rechaza desde su portal.</p>
+          ) : (
+            <>
+              <p className="text-muted">Se creará una conversación vacía con un enlace privado. El cliente completará sus datos y elegirá qué necesita.</p>
+              <label className="label" htmlFor="gen-name">Nombre del cliente (opcional)</label>
+              <input id="gen-name" className="input" value={genName} maxLength={160} onChange={e => setGenName(e.target.value)} placeholder="Ej.: Carlos Pérez" autoComplete="off" />
+              <p className="text-xs text-muted">Si lo escribes, el portal saludará al cliente por su nombre y el mensaje de WhatsApp lo incluirá.</p>
+            </>
+          )}
           {genError && <p role="alert" className="text-sm text-red-500">{genError}</p>}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-ghost" disabled={generating} onClick={() => setGenOpen(false)}>Cancelar</button>

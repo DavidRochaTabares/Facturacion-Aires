@@ -42,6 +42,6 @@ export interface CompanyConversation {
 }
 
 export interface CompanyAccessStatus {
-  link_active: boolean; link_issued_at: string | null
+  link_active: boolean; links_active: number; link_issued_at: string | null
   admin: { email: string; active: boolean; created_at: string } | null
 }
