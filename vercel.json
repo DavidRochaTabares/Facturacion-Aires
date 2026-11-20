@@ -23,7 +23,7 @@
       ]
     },
     {
-      "source": "/solicitud",
+      "source": "/(solicitud|empresa-acceso)",
       "headers": [
         {
           "key": "Referrer-Policy",

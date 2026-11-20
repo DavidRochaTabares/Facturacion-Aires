@@ -29,7 +29,7 @@ const POLL_MS = 12_000
 const when = (iso: string) => new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const dmy = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '')
 
-function Shell({ children, fill = false }: { children: React.ReactNode; fill?: boolean }) {
+export function Shell({ children, fill = false }: { children: React.ReactNode; fill?: boolean }) {
   const { theme, toggle } = useTheme()
   const dark = theme === 'dark'
   return (

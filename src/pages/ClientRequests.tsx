@@ -4,6 +4,7 @@ import RequestConversation, { LinkModal } from '../components/RequestConversatio
 import { Empty, FilterBar, Loading, Modal, PageHeader, Select, Spinner } from '../components/ui'
 import { refreshAll, useAsync, useDebounced } from '../hooks'
 import { requestsService, type RequestFilters } from '../services/requests'
+import { APPROVAL_CLS, APPROVAL_LABEL, type ApprovalStatus } from '../types/company'
 import { displayStatus, REQUEST_TYPE_LABEL, STATUS_FILTERS, typeLabel, type ClientRequestRow, type RequestType } from '../types/requests'
 
 const when = (iso: string) => new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -12,6 +13,7 @@ const ago = (iso: string) => {
   return m < 1 ? 'ahora' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`
 }
 const TYPES = Object.keys(REQUEST_TYPE_LABEL) as RequestType[]
+const APPROVALS = Object.keys(APPROVAL_LABEL) as ApprovalStatus[]
 
 export default function ClientRequests() {
   const [f, setF] = useState<RequestFilters>({})
@@ -66,6 +68,7 @@ export default function ClientRequests() {
       )}
       <FilterBar search={f.search ?? ''} onSearch={v => setF(p => ({ ...p, search: v }))} active={Object.entries(f).filter(([k, x]) => k !== 'search' && x).length}>
         <div className="md:w-52"><Select value={f.status ?? ''} onChange={set('status')} aria-label="Estado">{STATUS_FILTERS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}</Select></div>
+        <div className="md:w-52"><Select value={f.approval ?? ''} onChange={set('approval')} aria-label="Aprobación"><option value="">Toda aprobación</option><option value="none">Sin empresa</option>{APPROVALS.map(a => <option key={a} value={a}>{APPROVAL_LABEL[a]}</option>)}</Select></div>
         <div className="md:w-44"><Select value={f.type ?? ''} onChange={set('type')} aria-label="Tipo"><option value="">Todos los tipos</option>{TYPES.map(t => <option key={t} value={t}>{REQUEST_TYPE_LABEL[t]}</option>)}</Select></div>
         <input type="date" className="input md:!w-40" aria-label="Creada desde" value={f.date_from ?? ''} onChange={set('date_from')} />
         <input type="date" className="input md:!w-40" aria-label="Creada hasta" value={f.date_to ?? ''} onChange={set('date_to')} />
@@ -75,14 +78,16 @@ export default function ClientRequests() {
       <div className="card overflow-hidden">
         {loading && !data ? <Loading /> : error ? <Empty><span role="alert" className="text-red-500">{error}</span></Empty> : rows.length === 0 ? <Empty>No hay solicitudes con estos filtros.</Empty> : (
           <div className="overflow-x-auto"><table className="w-full text-[13px]">
-            <thead><tr className="border-b border-line bg-surface2/50">{['Cliente', 'Tipo', 'Estado', 'Creada', 'Última actividad', 'Sin leer'].map(h => <th key={h} className="th !px-3">{h}</th>)}</tr></thead>
+            <thead><tr className="border-b border-line bg-surface2/50">{['Cliente', 'Empresa', 'Tipo', 'Estado', 'Aprobación', 'Creada', 'Última actividad', 'Sin leer'].map(h => <th key={h} className="th !px-3">{h}</th>)}</tr></thead>
             <tbody className="divide-y divide-line">{rows.map((r: ClientRequestRow) => {
               const st = displayStatus(r)
               return (
                 <tr key={r.id} onClick={() => setOpenId(r.id)} className="cursor-pointer hover:bg-surface2/60">
-                  <td className="td !px-3 !whitespace-normal"><p className={r.client_name ? 'font-medium' : 'font-medium text-muted'}>{r.client_name || 'Cliente sin identificar'}</p><p className="text-xs text-muted">{r.client_email || r.client_phone || 'Aún no abre el enlace'}</p></td>
+                  <td className="td !px-3 !whitespace-normal"><p className={r.client_name ? 'font-medium' : 'font-medium text-muted'}>{r.client_name || 'Cliente sin identificar'}</p><p className="text-xs text-muted">{r.client_email || r.client_phone || (r.company_id ? 'Empleado de la empresa' : 'Aún no abre el enlace')}</p></td>
+                  <td className="td !px-3 !whitespace-normal">{r.company_name || <span className="text-muted">—</span>}</td>
                   <td className="td !px-3">{typeLabel(r.request_type)}</td>
                   <td className="td !px-3"><span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>{!r.link_active && <span className="ml-2 text-xs text-muted">enlace revocado</span>}</td>
+                  <td className="td !px-3">{r.approval_status ? <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${APPROVAL_CLS[r.approval_status]}`}>{APPROVAL_LABEL[r.approval_status]}</span> : <span className="text-muted">—</span>}</td>
                   <td className="td !px-3">{when(r.created_at)}</td>
                   <td className="td !px-3" title={when(r.last_activity_at)}>{ago(r.last_activity_at)}</td>
                   <td className="td !px-3">{r.agency_unread > 0 ? <span className="inline-flex items-center gap-1 rounded-full bg-brand px-2 py-0.5 text-xs font-semibold text-white dark:text-slate-900"><MessageSquare size={11} />{r.agency_unread}</span> : <span className="text-muted">—</span>}</td>

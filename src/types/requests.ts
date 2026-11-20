@@ -1,3 +1,4 @@
+import type { ApprovalStatus } from './company'
 export type RequestType = 'flight' | 'hotel' | 'transport' | 'food' | 'package' | 'other'
 export type RequestStatus = 'new' | 'in_progress' | 'closed' | 'reopened'
 export type DocType = 'CC' | 'CE' | 'TI' | 'RC' | 'PA' | 'NIT'
@@ -21,6 +22,7 @@ export interface RequestMessage { id: string; author: 'client' | 'agency'; body:
 export interface ClientRequestRow {
   id: string; created_at: string; client_name: string; client_email: string; client_phone: string; request_type: RequestType | null; description: string
   status: RequestStatus; submitted_at: string | null; last_activity_at: string; last_message_author: 'client' | 'agency' | null; agency_unread: number; link_active: boolean
+  company_id: string | null; company_name: string; approval_status: ApprovalStatus | null
 }
 /** One additional requirement inside a conversation (agency view: passengers/files are filtered by item_id from the flat lists). */
 export interface ClientRequestItem {

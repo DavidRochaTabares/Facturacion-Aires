@@ -3,6 +3,7 @@ import { Copy, KeyRound, Lock, LockOpen, MessageCircle, Paperclip, Send, Trash2,
 import { copyText } from '../lib/clipboard'
 import { requestsService, type CleanupResult } from '../services/requests'
 import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment } from '../types/requests'
+import { ApprovalPanel } from './ApprovalPanel'
 import { AttachmentCard, PendingFiles, type UrlResolver } from './AttachmentPreview'
 import { ConfirmDialog } from './ConfirmDialog'
 import { Drawer, Loading, Modal, Spinner } from './ui'
@@ -12,7 +13,7 @@ const dmy = (d?: string | number) => (d ? new Date(`${d}T00:00:00`).toLocaleDate
 const POLL_MS = 15_000
 
 /** Field→label mapping shared by the main request and each additional item (only the service's own fields show up). */
-const detailFacts = (d: Record<string, string | number>): [string, string][] => ([
+export const detailFacts = (d: Record<string, string | number>): [string, string][] => ([
   ['Origen', String(d.origin ?? '')], ['Destino', String(d.destination ?? '')], ['Salida', dmy(d.departure_date)], ['Regreso', dmy(d.return_date)],
   ['Viaje', d.scope ? `${d.scope === 'international' ? 'Internacional' : 'Nacional'} · ${d.trip_type === 'roundtrip' ? 'ida y vuelta' : 'solo ida'}` : ''],
   ['Entrada', dmy(d.check_in)], ['Salida del hotel', dmy(d.check_out)], ['Huéspedes', String(d.guests ?? '')], ['Habitaciones', String(d.rooms ?? '')],
@@ -126,7 +127,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
   const st = full ? displayStatus(full) : null
   const d = full?.details ?? {}
   const facts: [string, string][] = full ? ([
-    ['Cliente', full.client_name], ['Correo', full.client_email], ['Teléfono', full.client_phone], ['Tipo', typeLabel(full.request_type)], ['Creada', when(full.created_at)],
+    [full.company_id ? 'Empleado' : 'Cliente', full.client_name], ...(full.company_name ? [['Empresa', full.company_name]] : []), ['Correo', full.client_email], ['Teléfono', full.client_phone], ['Tipo', typeLabel(full.request_type)], ['Creada', when(full.created_at)],
     ['Enviada por el cliente', full.submitted_at ? when(full.submitted_at) : 'Aún no completa el formulario'], ['Última actividad', when(full.last_activity_at)],
     ...detailFacts(d),
     ['Cerrada', full.closed_at ? when(full.closed_at) : ''], ['Enlace', full.link_active ? 'Activo' : 'Revocado'],
@@ -172,6 +173,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
               </div>
             </div>
             {notice && <p role="status" className="rounded-lg border border-line bg-surface2 p-3 text-sm">{notice}</p>}
+            {full.company_id && <ApprovalPanel requestId={full.id} companyName={full.company_name || 'la empresa'} status={full.approval_status} version={full.last_activity_at} onChanged={() => { load(true); changed.current() }} />}
 
             <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Datos de la solicitud</h3>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">{facts.map(([k, v]) => <div key={k}><dt className="text-xs text-muted">{k}</dt><dd className="break-words text-sm">{v}</dd></div>)}</dl>

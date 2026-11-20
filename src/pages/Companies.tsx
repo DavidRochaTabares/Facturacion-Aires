@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FilterX, ListChecks, Pencil, Plus, Search } from 'lucide-react'
+import { Building2, FilterX, ListChecks, Pencil, Plus, Search } from 'lucide-react'
+import { CompanyAccessPanel } from '../components/CompanyAccessPanel'
 import { Empty, Loading, Modal, PageHeader, Spinner, TextInput } from '../components/ui'
 import { useAsync, useDebounced } from '../hooks'
 import { money } from '../lib/format'
@@ -16,6 +17,7 @@ export default function Companies() {
   const { data, loading, error, reload } = useAsync(() => dataService.getCompanies(q), [q])
   const { data: stats } = useAsync(() => dataService.getServiceReports({}), [])
   const [editing, setEditing] = useState<Company | 'new' | null>(null)
+  const [portalFor, setPortalFor] = useState<Company | null>(null)
   const [form, setForm] = useState<CompanyInput>(blank)
   const [busy, setBusy] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -46,11 +48,13 @@ export default function Companies() {
                 <td className="td">{s ? `${s.count} · ${money(s.amount)}` : '0'}</td>
                 <td className="td"><div className="flex gap-1 justify-end">
                   <button className="btn-ghost !px-2" title="Ver registros" onClick={() => nav(`/registros?empresa=${c.id}`)}><ListChecks size={14} /></button>
+                  <button className="btn-ghost !px-2" title="Portal empresarial (enlace y administrador)" onClick={() => setPortalFor(c)}><Building2 size={14} /></button>
                   <button className="btn-ghost !px-2" title="Editar" onClick={() => openForm(c)}><Pencil size={14} /></button></div></td>
               </tr>) })}</tbody>
           </table></div>
         )}
       </div>
+      <CompanyAccessPanel company={portalFor} onClose={() => setPortalFor(null)} />
       <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Nueva empresa' : 'Editar empresa'}>
         <form onSubmit={save} className="space-y-3">
           <TextInput label="Nombre / razón social *" required {...f('name')} />

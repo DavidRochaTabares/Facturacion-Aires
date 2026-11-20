@@ -8,7 +8,7 @@ import type { ClientRequestFull, ClientRequestItem, ClientRequestRow, RequestAtt
 const BUCKET = 'client-requests'
 const MAX_FILE = 8 * 1024 * 1024
 const EXT: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }
-const LIST_COLS = 'id,created_at,client_name,client_email,client_phone,request_type,description,status,submitted_at,last_activity_at,last_message_author,agency_unread,link_revoked_at'
+const LIST_COLS = 'id,created_at,client_name,client_email,client_phone,request_type,description,status,submitted_at,last_activity_at,last_message_author,agency_unread,link_revoked_at,company_id,approval_status,companies(name)'
 
 const SESSION_MSG = 'Tu sesión expiró. Vuelve a iniciar sesión para continuar.'
 function fail(e: { message: string; code?: string; status?: number }): never {
@@ -21,9 +21,10 @@ const mapRow = (r: any): ClientRequestRow => ({
   id: r.id, created_at: r.created_at, client_name: r.client_name, client_email: r.client_email ?? '', client_phone: r.client_phone ?? '', request_type: (r.request_type ?? null) as RequestType | null,
   description: r.description ?? '', status: r.status, submitted_at: r.submitted_at, last_activity_at: r.last_activity_at, last_message_author: r.last_message_author,
   agency_unread: r.agency_unread ?? 0, link_active: r.link_revoked_at == null,
+  company_id: r.company_id ?? null, company_name: r.companies?.name ?? '', approval_status: (r.approval_status ?? null) as ClientRequestRow['approval_status'],
 })
 
-export interface RequestFilters { search?: string; status?: string; type?: string; date_from?: string; date_to?: string }
+export interface RequestFilters { search?: string; status?: string; type?: string; approval?: string; date_from?: string; date_to?: string }
 export interface CleanupResult { removed: number; pending: number }
 
 export const requestsService = {
@@ -33,6 +34,8 @@ export const requestsService = {
   async list(f: RequestFilters = {}): Promise<ClientRequestRow[]> {
     let q = supabase.from('client_requests').select(LIST_COLS).order('last_activity_at', { ascending: false }).limit(500)
     if (f.type) q = q.eq('request_type', f.type)
+    if (f.approval === 'none') q = q.is('company_id', null)
+    else if (f.approval) q = q.eq('approval_status', f.approval)
     if (f.date_from) q = q.gte('created_at', `${f.date_from}T00:00:00-05:00`)
     if (f.date_to) q = q.lte('created_at', `${f.date_to}T23:59:59-05:00`)
     const s = like(f.search ?? '')

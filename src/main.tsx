@@ -1,3 +1,4 @@
+import './lib/authHash'
 import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
@@ -18,6 +19,9 @@ import ClientRequests from './pages/ClientRequests'
 
 // Public portal: outside AuthProvider on purpose (the visitor never touches the agency's session) and lazy-loaded.
 const PublicRequest = lazy(() => import('./pages/portal/PublicRequest'))
+const CompanyAccess = lazy(() => import('./pages/portal/CompanyAccess'))
+// Company administrator portal: own session handling, separate from the agency's AuthProvider/layout.
+const CompanyPortal = lazy(() => import('./pages/company/CompanyPortal'))
 
 function Home() {
   const { session, loading } = useAuth()
@@ -66,6 +70,8 @@ root.render(
     <ThemeProvider><BrowserRouter>
       <Routes>
         <Route path="/solicitud" element={<Suspense fallback={null}><PublicRequest /></Suspense>} />
+        <Route path="/empresa-acceso" element={<Suspense fallback={null}><CompanyAccess /></Suspense>} />
+        <Route path="/empresa" element={<Suspense fallback={null}><CompanyPortal /></Suspense>} />
         <Route path="/*" element={<AuthProvider><AppRoutes /></AuthProvider>} />
       </Routes>
     </BrowserRouter></ThemeProvider>

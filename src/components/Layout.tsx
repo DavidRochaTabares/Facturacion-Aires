@@ -3,6 +3,7 @@ import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
 import { refreshAll, useAppUpdate, useAsync, useAuth, useTheme } from '../hooks'
 import { dataService } from '../services'
+import { companyPortal } from '../services/companyPortal'
 import { requestsService } from '../services/requests'
 import { CalculatorPanel } from './CalculatorPanel'
 import { AgencyLogo, Loading, MobileLogo, PoweredBy, ThemeSwitch } from './ui'
@@ -52,6 +53,9 @@ export function ProtectedLayout() {
     } finally { setRefreshing(false); setTimeout(() => setRefreshMsg(''), 3500) }
   }
   const nav = useNavigate()
+  // Enterprise administrators share the Supabase login but never use the agency app: send them to their own portal (RLS blocks the data anyway).
+  const enterprise = useAsync(() => (session ? companyPortal.isCompanyAdmin() : Promise.resolve(false)), [!!session])
+  if (enterprise.data === true) return <Navigate to="/empresa" replace />
   if (loading) return <div className="min-h-screen grid place-items-center"><Loading /></div>
   if (!session) return <Navigate to="/login" replace />
 
