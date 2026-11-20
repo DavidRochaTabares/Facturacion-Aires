@@ -37,3 +37,27 @@ self.addEventListener('fetch', e => {
     })))
   }
 })
+
+// Web Push: new client messages for the agency. Shows the notification and syncs the app icon badge (works on iOS too once permission is granted).
+self.addEventListener('push', e => {
+  let d = {}
+  try { d = e.data ? e.data.json() : {} } catch { /* plain text payload */ }
+  e.waitUntil((async () => {
+    await self.registration.showNotification(d.title || 'Aires y Destinos', {
+      body: d.body || 'Tienes un mensaje nuevo', icon: '/icon-192.png', badge: '/icon-192.png', tag: d.tag || 'aires-message', renotify: true, data: { url: d.url || '/solicitudes' },
+    })
+    if (typeof d.unread === 'number' && self.navigator.setAppBadge) {
+      try { await (d.unread > 0 ? self.navigator.setAppBadge(d.unread) : self.navigator.clearAppBadge()) } catch { /* badge not supported */ }
+    }
+  })())
+})
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close()
+  const url = new URL((e.notification.data && e.notification.data.url) || '/solicitudes', self.location.origin).href
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    const open = list.find(c => c.url.startsWith(self.location.origin))
+    if (open) return open.focus().then(c => (c && 'navigate' in c ? c.navigate(url) : undefined))
+    return self.clients.openWindow(url)
+  }))
+})

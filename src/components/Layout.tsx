@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
+import { Bell, BellOff, Building2, BedDouble, Bus, HandCoins, LayoutDashboard, ListChecks, LogOut, Menu, Moon, Plane, Sparkles, Sun, BarChart3, Landmark, Utensils, Calculator as CalcIcon, CreditCard, RefreshCw, MessageSquare } from 'lucide-react'
 import { refreshAll, useAppUpdate, useAsync, useAuth, useTheme } from '../hooks'
 import { dataService } from '../services'
+import { enablePush, pushState, syncPush, type PushState } from '../lib/push'
 import { companyPortal } from '../services/companyPortal'
 import { requestsService } from '../services/requests'
 import { CalculatorPanel } from './CalculatorPanel'
@@ -62,6 +63,19 @@ export function ProtectedLayout() {
     } finally { setRefreshing(false); setTimeout(() => setRefreshMsg(''), 3500) }
   }
   const nav = useNavigate()
+  const [push, setPush] = useState<PushState>(() => pushState())
+  const [pushMsg, setPushMsg] = useState('')
+  useEffect(() => { if (session) syncPush().catch(() => undefined) }, [!!session])
+  const togglePush = async () => {
+    setPushMsg('')
+    try {
+      const r = await enablePush()
+      setPush(r)
+      if (r === 'denied') setPushMsg('Las notificaciones están bloqueadas. Permítelas en la configuración del navegador o del sistema.')
+      else if (r === 'granted') setPushMsg('Notificaciones activadas en este dispositivo.')
+    } catch (e) { setPushMsg(e instanceof Error ? e.message : 'No se pudieron activar las notificaciones.') }
+    finally { setTimeout(() => setPushMsg(''), 8000) }
+  }
   // Enterprise administrators share the Supabase login but never use the agency app: send them to their own portal (RLS blocks the data anyway).
   const enterprise = useAsync(() => (session ? companyPortal.isCompanyAdmin() : Promise.resolve(false)), [!!session])
   if (enterprise.data === true) return <Navigate to="/empresa" replace />
@@ -98,6 +112,16 @@ export function ProtectedLayout() {
             <span className="flex items-center gap-3">{theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />}{theme === 'dark' ? 'Modo oscuro' : 'Modo claro'}</span>
             <ThemeSwitch dark={theme === 'dark'} onToggle={toggle} />
           </div>
+          {push !== 'unsupported' && (
+            <>
+              <button type="button" onClick={push === 'needs-install' ? () => setPushMsg('En iPhone: abre el menú Compartir y elige «Añadir a pantalla de inicio»; luego abre la app instalada y activa las notificaciones.') : togglePush} disabled={push === 'denied' || push === 'granted'}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-surface2 hover:text-fg disabled:opacity-60">
+                {push === 'granted' ? <Bell size={18} className="text-brand" /> : <BellOff size={18} />}
+                {push === 'granted' ? 'Notificaciones activas' : push === 'denied' ? 'Notificaciones bloqueadas' : 'Activar notificaciones'}
+              </button>
+              {pushMsg && <p role="status" className="px-3 pb-1 text-xs text-muted">{pushMsg}</p>}
+            </>
+          )}
           <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10 dark:text-red-400" onClick={async () => { await signOut(); nav('/login') }}><LogOut size={18} />Cerrar sesión</button>
           <div className="mt-3 border-t border-line px-3 pt-3"><PoweredBy /></div>
         </div>
