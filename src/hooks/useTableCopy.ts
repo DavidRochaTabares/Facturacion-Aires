@@ -5,6 +5,7 @@ interface Pt { r: number; c: number }
 interface Sel { a: Pt; b: Pt }
 
 /** Plain-text value of a cell: strips badges/buttons marked data-copyignore and collapses whitespace so the TSV stays one line per row. */
+const INTERACTIVE = 'button,a,input,select,textarea,label,[role=button]'
 const cellText = (td: Element): string => {
   const c = td.cloneNode(true) as HTMLElement
   c.querySelectorAll('[data-copyignore],button').forEach(x => x.remove())
@@ -107,6 +108,7 @@ export function useTableCopy(colCount: number, numericCols: boolean[] = [], onOp
   }, [colCount])
 
   const onMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(INTERACTIVE)) return // buttons and links keep their normal single click
     const td = (e.target as HTMLElement).closest('td'), tr = td?.closest<HTMLTableRowElement>('tr[data-rr]')
     if (!td || !tr || td.colSpan > 1 || td.cellIndex >= colCount) return
     e.preventDefault() // blocks text selection & row activation; we manage selection ourselves
@@ -126,9 +128,11 @@ export function useTableCopy(colCount: number, numericCols: boolean[] = [], onOp
     setSel(s => (s ? { a: s.a, b: { r, c } } : s))
   }
   const onClickCapture = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('tr[data-rr]')) e.stopPropagation() // selecting never opens the record
+    const t = e.target as HTMLElement
+    if (!t.closest(INTERACTIVE) && t.closest('tr[data-rr]')) e.stopPropagation() // selecting never opens the record; buttons/links are left alone
   }
   const onDoubleClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(INTERACTIVE)) return
     const tr = (e.target as HTMLElement).closest<HTMLTableRowElement>('tr[data-rr]')
     if (tr?.dataset.id) openRef.current?.(tr.dataset.id)
   }

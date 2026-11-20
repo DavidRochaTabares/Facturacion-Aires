@@ -13,8 +13,8 @@ export default function Dashboard() {
   if (loading || !data) return <Loading />
   const cards = [
     { label: 'Total registros', value: data.total_operations, icon: FileText },
-    { label: 'Costo total', value: money(data.total_cost), icon: Banknote },
-    { label: 'Valor a cobrar', value: money(data.total_charge), icon: Wallet },
+    { label: 'Costo total', value: money(data.total_cost), icon: Banknote, wide: true },
+    { label: 'Valor a cobrar', value: money(data.total_charge), icon: Wallet, wide: true },
     { label: 'Vuelos', value: data.total_flights, icon: Plane },
     { label: 'Hoteles', value: data.total_hotels, icon: BedDouble },
     { label: 'Préstamos', value: data.total_loans, icon: HandCoins },
@@ -24,17 +24,17 @@ export default function Dashboard() {
     <>
       <PageHeader title="Dashboard" subtitle="Resumen general de la operación" />
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted mb-3">Registros de servicios</h2>
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 xl:grid-cols-9">
         {cards.map(c => (
-          <div key={c.label} className="card p-4">
+          <div key={c.label} className={`card p-4 ${'wide' in c ? 'xl:col-span-2' : ''}`}>
             <div className="flex items-center justify-between text-muted text-xs font-medium">{c.label}<c.icon size={16} /></div>
-            <p className="mt-2 text-xl font-semibold tabular-nums truncate">{c.value}</p>
+            <p className="mt-2 text-lg sm:text-xl font-semibold tabular-nums truncate" title={String(c.value)}>{c.value}</p>
           </div>
         ))}
       </div>
       <div className="grid gap-4 mt-4 lg:grid-cols-2">
-        <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Distribución por tipo de servicio</h2><DonutChart data={data.by_type} /></section>
-        <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Costo por empresa</h2><BarList data={data.by_company} /></section>
+        <section className="card p-5 flex flex-col"><h2 className="font-semibold text-sm mb-4">Distribución por tipo de servicio</h2><div className="flex flex-1 items-center"><div className="w-full"><DonutChart data={data.by_type} /></div></div></section>
+        <section className="card p-5"><h2 className="font-semibold text-sm mb-4">Costo por empresa</h2><div className="max-h-72 overflow-y-auto overscroll-contain pr-2"><BarList data={data.by_company} /></div></section>
       </div>
       <section className="card mt-4">
         <div className="flex items-center justify-between p-5 pb-3"><h2 className="font-semibold text-sm">Registros recientes</h2><Link to="/registros" className="text-sm text-brand">Ver todos</Link></div>

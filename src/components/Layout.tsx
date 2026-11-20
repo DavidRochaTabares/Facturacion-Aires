@@ -32,10 +32,19 @@ export function ProtectedLayout() {
     return { flight: f.length, loan: l.length, alerts: a.filter(x => x.due_date <= today).length }
   }, [])
   useEffect(() => {
-    const t = setInterval(() => { if (document.visibilityState === 'visible') { unread.reload(); counts.reload() } }, 60_000)
+    // the unread count (a cheap head query) also refreshes while the window is in the background so the app icon badge stays current
+    const t = setInterval(() => { unread.reload(); if (document.visibilityState === 'visible') counts.reload() }, 60_000)
     return () => clearInterval(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // Installed PWA: show the number of conversations with unread client messages on the app icon (Badging API; ignored where unsupported).
+  const unreadCount = unread.data ?? 0
+  useEffect(() => {
+    const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> }
+    if (!nav.setAppBadge) return
+    ;(unreadCount > 0 ? nav.setAppBadge(unreadCount) : nav.clearAppBadge?.())?.catch(() => undefined)
+  }, [unreadCount])
+  useEffect(() => () => { (navigator as Navigator & { clearAppBadge?: () => Promise<void> }).clearAppBadge?.().catch(() => undefined) }, [])
   const badge = (to: string) =>
     to === '/solicitudes' ? (unread.data ?? 0)
     : to === '/vuelos' ? (counts.data?.flight ?? 0)
