@@ -3,6 +3,7 @@ import { ArrowLeft, Lock, MessageCircle, Moon, Paperclip, Pencil, Plane, Plus, S
 import spineDay from '../../assets/spinedev-day.png'
 import spineNight from '../../assets/spinedev-night.png'
 import { AttachmentCard, forgetPreview, PendingFiles, type UrlResolver } from '../../components/AttachmentPreview'
+import { AdminBadge, ADMIN_BUBBLE, parseAdmin } from '../../components/AdminMessage'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { AgencyLogo, Spinner } from '../../components/ui'
 import { useTheme } from '../../hooks'
@@ -301,15 +302,16 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
         <div ref={list} onScroll={trackList} className="max-h-[65dvh] flex-1 overflow-y-auto pb-3 pr-1" aria-live="polite">
           <div ref={content} className="space-y-3">
             {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">{r.client_name.trim() ? `Hola, ${r.client_name.trim().split(' ')[0]}. ` : 'Hola. '}{r.submitted_at ? 'Tu solicitud fue enviada. La agencia te responderá aquí.' : 'Escríbenos lo que necesitas: la agencia te responderá en este mismo chat.'}</p>}
-            {messages.map(m => (
-              <div key={m.id} className={`flex ${m.author === 'client' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.author === 'client' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
-                  <p className={`mb-0.5 text-[11px] font-medium ${m.author === 'client' ? 'opacity-80' : 'text-muted'}`}>{m.author === 'client' ? 'Tú' : 'Aires y Destinos'} · {when(m.created_at)}</p>
-                  {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+            {messages.map(m => { const { admin, text: body } = parseAdmin(m.author, m.body); return (
+              <div key={m.id} className={`flex ${m.author === 'client' && !admin ? 'justify-end' : 'justify-start'}`}>
+                <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${admin ? `${ADMIN_BUBBLE} rounded-bl-sm` : m.author === 'client' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
+                  {admin && <AdminBadge />}
+                  <p className={`mb-0.5 text-[11px] font-medium ${admin ? 'opacity-90' : m.author === 'client' ? 'opacity-80' : 'text-muted'}`}>{admin ? 'Administrador' : m.author === 'client' ? 'Tú' : 'Aires y Destinos'} · {when(m.created_at)}</p>
+                  {body && <p className="whitespace-pre-wrap break-words">{body}</p>}
                   <AttachmentList items={attOf(m.id)} resolve={resolve} auto canRemove={mine} onRemove={a => { setDelError(''); setDeleting(a) }} />
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
 

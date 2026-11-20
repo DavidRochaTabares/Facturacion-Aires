@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Check, Eye, EyeOff, LogOut, MessageSquare, Moon, Send, Sun, X } from 'lucide-react'
+import { AdminBadge, ADMIN_BUBBLE, parseAdmin } from '../../components/AdminMessage'
 import { AttachmentCard, type UrlResolver } from '../../components/AttachmentPreview'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { detailFacts } from '../../components/RequestConversation'
@@ -230,14 +231,15 @@ function ConversationDetail({ id, onClose, onChanged }: { id: string | null; onC
             <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Conversación</h3>
               <div ref={list} className="max-h-[50dvh] space-y-3 overflow-y-auto rounded-lg border border-line p-3">
                 {data.messages.length === 0 && <p className="py-4 text-center text-sm text-muted">Aún no hay mensajes.</p>}
-                {data.messages.map(m => (
+                {data.messages.map(m => { const { admin, text: body } = parseAdmin(m.author, m.body); return (
                   <div key={m.id} className={`flex ${m.author === 'agency' ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.author === 'agency' ? 'bg-surface2 rounded-bl-sm' : 'bg-brand text-white dark:text-slate-900 rounded-br-sm'}`}>
-                      <p className={`mb-0.5 text-[11px] font-medium ${m.author === 'agency' ? 'text-muted' : 'opacity-80'}`}>{m.author === 'agency' ? 'Aires y Destinos' : r.employee_name} · {when(m.created_at)}</p>
-                      {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                    <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${admin ? `${ADMIN_BUBBLE} rounded-br-sm` : m.author === 'agency' ? 'bg-surface2 rounded-bl-sm' : 'bg-brand text-white dark:text-slate-900 rounded-br-sm'}`}>
+                      {admin && <AdminBadge />}
+                      <p className={`mb-0.5 text-[11px] font-medium ${admin ? 'opacity-90' : m.author === 'agency' ? 'text-muted' : 'opacity-80'}`}>{admin ? 'Tú' : m.author === 'agency' ? 'Aires y Destinos' : r.employee_name} · {when(m.created_at)}</p>
+                      {body && <p className="whitespace-pre-wrap break-words">{body}</p>}
                       {data.attachments.filter(a => a.message_id === m.id).map(a => <div key={a.id} className="mt-2 w-72 max-w-full"><AttachmentCard att={a} resolve={resolve} auto /></div>)}
                     </div>
-                  </div>))}
+                  </div>)})}
               </div>
               {r.closed ? <p className="mt-3 rounded-lg bg-surface2 p-3 text-sm">Conversación cerrada: ya no se pueden enviar mensajes.</p> : (
                 <form onSubmit={send} className="mt-3 space-y-2">

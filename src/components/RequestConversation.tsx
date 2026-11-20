@@ -4,6 +4,7 @@ import { copyText } from '../lib/clipboard'
 import { companyAccessAdmin } from '../services/companyPortal'
 import { requestsService, type CleanupResult } from '../services/requests'
 import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment } from '../types/requests'
+import { AdminBadge, ADMIN_BUBBLE, parseAdmin } from './AdminMessage'
 import { ApprovalPanel } from './ApprovalPanel'
 import { AttachmentCard, PendingFiles, type UrlResolver } from './AttachmentPreview'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -235,15 +236,16 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
             <section><h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Conversación</h3>
               <div ref={bottom} className="max-h-[60dvh] space-y-3 overflow-y-auto rounded-lg border border-line p-3">
                 {full.messages.length === 0 && <p className="py-4 text-center text-sm text-muted">Aún no hay mensajes.</p>}
-                {full.messages.map(m => (
+                {full.messages.map(m => { const { admin, text: body } = parseAdmin(m.author, m.body); return (
                   <div key={m.id} className={`flex ${m.author === 'agency' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`group max-w-[88%] rounded-2xl px-3 py-2 text-sm ${m.author === 'agency' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
-                      <div className="mb-0.5 flex items-center justify-between gap-3"><p className={`text-[11px] font-medium ${m.author === 'agency' ? 'opacity-80' : 'text-muted'}`}>{m.author === 'agency' ? 'Agencia' : full.client_name} · {when(m.created_at)}</p>
+                    <div className={`group max-w-[88%] rounded-2xl px-3 py-2 text-sm ${admin ? `${ADMIN_BUBBLE} rounded-bl-sm` : m.author === 'agency' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
+                      {admin && <AdminBadge />}
+                      <div className="mb-0.5 flex items-center justify-between gap-3"><p className={`text-[11px] font-medium ${admin ? 'opacity-90' : m.author === 'agency' ? 'opacity-80' : 'text-muted'}`}>{m.author === 'agency' ? 'Agencia' : admin ? 'Administrador' : full.client_name} · {when(m.created_at)}</p>
                         <button type="button" title="Eliminar mensaje" aria-label="Eliminar mensaje" onClick={() => { setActionError(''); setAction({ kind: 'del-message', id: m.id }) }} className="opacity-60 hover:opacity-100"><Trash2 size={12} /></button></div>
-                      {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
+                      {body && <p className="whitespace-pre-wrap break-words">{body}</p>}
                       {full.attachments.some(a => a.message_id === m.id) && <ul className="mt-2 space-y-1 text-fg">{full.attachments.filter(a => a.message_id === m.id).map(a => attBtn(a, true))}</ul>}
                     </div>
-                  </div>))}
+                  </div>)})}
               </div>
               {closed ? <p className="mt-3 flex items-center gap-2 rounded-lg bg-surface2 p-3 text-sm"><Lock size={14} />Conversación cerrada. Reábrela para volver a responder.</p> : (
                 <form onSubmit={send} className="mt-3 space-y-2">

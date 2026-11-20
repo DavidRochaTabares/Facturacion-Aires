@@ -53,7 +53,7 @@ input[type="date"],input[type="time"],input[type="month"],input[type="datetime-l
 
 /* Native controls (date pickers, scrollbars, form widgets) follow the active theme */
 /* Cursor de texto con contorno claro y trazo oscuro: se ve sobre cualquier fondo (algunos sistemas lo pintan blanco sobre campos blancos). */
-input:not([type]),input[type=text],input[type=email],input[type=password],input[type=search],input[type=tel],input[type=number],input[type=url],textarea,.input{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='24' viewBox='0 0 16 24'%3E%3Cpath d='M4 2h8M8 2v20M4 22h8' stroke='white' stroke-width='4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M4 2h8M8 2v20M4 22h8' stroke='%23111827' stroke-width='2' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") 8 12,text}
+input:not([type]),input[type=text],input[type=email],input[type=password],input[type=search],input[type=tel],input[type=number],input[type=url],textarea,.input{cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='20' viewBox='0 0 12 20'%3E%3Cpath d='M3 1.5h6M6 1.5v17M3 18.5h6' stroke='white' stroke-opacity='.8' stroke-width='3' stroke-linecap='round' fill='none'/%3E%3Cpath d='M3 1.5h6M6 1.5v17M3 18.5h6' stroke='%231f2937' stroke-width='1.25' stroke-linecap='round' fill='none'/%3E%3C/svg%3E") 6 10,text}
 :root{color-scheme:light}
 .dark{color-scheme:dark}
 
