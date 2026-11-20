@@ -100,6 +100,8 @@ alter table public.company_admins enable row level security;
 alter table public.conversation_approvals enable row level security;
 revoke all on public.company_links, public.company_admins, public.conversation_approvals from anon, authenticated;
 grant all on public.company_links, public.company_admins, public.conversation_approvals to service_role;
+-- la Edge Function company-admin lee companies con service_role (no se asume el privilegio por defecto)
+grant select on public.companies to service_role;
 -- la agencia solo LEE (sin token_hash); todo cambio pasa por funciones o por la Edge Function company-admin
 grant select (id, company_id, created_at, created_by, revoked_at, revoked_by) on public.company_links to authenticated;
 grant select on public.company_admins, public.conversation_approvals to authenticated;

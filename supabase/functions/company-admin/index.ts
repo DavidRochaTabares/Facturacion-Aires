@@ -27,7 +27,8 @@ async function recoveryLink(email: string, redirect: string): Promise<string | n
   const r = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, { method: 'POST', headers: svc, body: JSON.stringify({ type: 'recovery', email, redirect_to: redirect }) })
   if (!r.ok) { console.error('generate_link failed', r.status); return null }
   const j = await r.json()
-  return typeof j?.action_link === 'string' ? j.action_link : null
+  // Own-domain link (no Supabase URL, keys or project id): the one-time token travels in the fragment and is exchanged by the portal with verifyOtp.
+  return typeof j?.hashed_token === 'string' ? `${redirect}#activar=${encodeURIComponent(j.hashed_token)}` : null
 }
 
 Deno.serve(async (req: Request) => {
@@ -49,7 +50,8 @@ Deno.serve(async (req: Request) => {
   if (!/^https?:\/\//.test(redirect)) return fail(500, 'Falta configurar APP_URL en la función.')
 
   const company = await rest(`companies?select=id,name&id=eq.${companyId}`)
-  if (!company.ok || !(await company.json()).length) return fail(404, 'La empresa no existe.')
+  if (!company.ok) { console.error('companies lookup failed', company.status, (await company.text()).slice(0, 200)); return fail(500, 'No se pudo consultar la empresa (permisos de la función sobre la tabla companies).') }
+  if (!(await company.json()).length) return fail(404, 'La empresa no existe.')
   const cur = await rest(`company_admins?select=user_id,email,active&company_id=eq.${companyId}`)
   if (!cur.ok) return fail(500, 'No se pudo consultar el administrador.')
   const admin = (await cur.json())[0] as { user_id: string; email: string; active: boolean } | undefined

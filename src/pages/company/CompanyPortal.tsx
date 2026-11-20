@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { detailFacts } from '../../components/RequestConversation'
 import { AgencyLogo, Drawer, Empty, Loading, Spinner } from '../../components/ui'
 import { useTheme } from '../../hooks'
-import { AUTH_LINK_ERROR, OPENED_FROM_RECOVERY_LINK } from '../../lib/authHash'
+import { ACTIVATION_TOKEN, AUTH_LINK_ERROR, OPENED_FROM_RECOVERY_LINK } from '../../lib/authHash'
 import { supabase } from '../../lib/supabase'
 import { companyPortal } from '../../services/companyPortal'
 import { APPROVAL_ACTION_LABEL, APPROVAL_CLS, APPROVAL_LABEL, type ApprovalStatus, type CompanyConversation, type CompanyConversationRow, type CompanyPortalMe } from '../../types/company'
@@ -55,11 +55,15 @@ function PasswordField({ label, value, onChange, autoComplete }: { label: string
   )
 }
 
-function Login() {
+// The one-time token must be exchanged exactly once (React StrictMode runs effects twice in development).
+let activation: Promise<boolean> | null = null
+const activate = () => (activation ??= supabase.auth.verifyOtp({ token_hash: ACTIVATION_TOKEN, type: 'recovery' }).then(({ error }) => !error))
+
+function Login({ expired }: { expired: boolean }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(AUTH_LINK_ERROR ? 'El enlace de acceso venció o ya fue usado. Pide a Aires y Destinos uno nuevo o usa «Olvidé mi contraseña».' : '')
+  const [error, setError] = useState(AUTH_LINK_ERROR || expired ? 'El enlace de acceso venció o ya fue usado. Pide a Aires y Destinos uno nuevo o usa «Olvidé mi contraseña».' : '')
   const [info, setInfo] = useState('')
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setBusy(true); setError(''); setInfo('')
@@ -329,12 +333,18 @@ export default function CompanyPortal() {
   const [ready, setReady] = useState(false)
   const [setting, setSetting] = useState(OPENED_FROM_RECOVERY_LINK)
   const [me, setMe] = useState<CompanyPortalMe | null | undefined>(undefined)
+  const [activating, setActivating] = useState(!!ACTIVATION_TOKEN)
+  const [expired, setExpired] = useState(false)
 
   useEffect(() => {
     document.title = 'Portal empresarial · Aires y Destinos'
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true) })
     const { data } = supabase.auth.onAuthStateChange((event, s) => { setSession(s); if (event === 'PASSWORD_RECOVERY') setSetting(true) })
     return () => data.subscription.unsubscribe()
+  }, [])
+  useEffect(() => {
+    if (!ACTIVATION_TOKEN) return
+    activate().then(ok => { history.replaceState(null, '', location.pathname); if (ok) setSetting(true); else setExpired(true); setActivating(false) })
   }, [])
   const userId = session?.user.id
   useEffect(() => {
@@ -345,8 +355,8 @@ export default function CompanyPortal() {
   }, [userId])
 
   const signOut = () => supabase.auth.signOut()
-  if (!ready) return <Frame><Loading /></Frame>
-  if (!session) return <Frame><Login /></Frame>
+  if (!ready || activating) return <Frame><Loading /></Frame>
+  if (!session) return <Frame><Login expired={expired} /></Frame>
   if (setting) return <Frame onSignOut={signOut}><SetPassword onDone={() => setSetting(false)} /></Frame>
   if (me === undefined) return <Frame onSignOut={signOut}><Loading /></Frame>
   if (!me) return (
