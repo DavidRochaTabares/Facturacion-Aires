@@ -1,8 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { AlertTriangle, FileText, Paperclip, Plus, Trash2 } from 'lucide-react'
 import { useAsync } from '../hooks'
 import { money } from '../lib/format'
-import { DOC_CATEGORIES, DOC_CATEGORY_LABEL, flightMissing, GROUPABLE, isRealPassenger, loanIva, loanMissing, MARKUP, suggestCharge, TA_VAT } from '../lib/service'
+import { DOC_CATEGORIES, DOC_CATEGORY_LABEL, flightMissing, GROUPABLE, isRealPassenger, loanIva, loanMissing, MARKUP, suggestCharge, taBreakdown, taOnCompanyChange } from '../lib/service'
 import { dataService } from '../services'
 import type { DetailsMap, DocCategory, OperationInput, OperationType, PassengerData, PendingDoc, SegmentData } from '../types'
 import { AIRLINES } from '../constants/airlines'
@@ -106,15 +106,30 @@ export default function ServiceForm({ type, initial, initialDocs, submitLabel = 
   const cn = (k: 'amount') => ({ value: c[k] || '', onChange: (e: { target: { value: string } }) => setC(p => ({ ...p, [k]: Number(e.target.value) || 0 })) })
   const tv = (k: string) => ({ value: d[k] ?? '', onChange: (e: { target: { value: string } }) => setD((p: any) => ({ ...p, [k]: e.target.value })) })
   const nv = (k: string) => ({ type: 'number' as const, min: 0, value: d[k] ?? '', onChange: (e: { target: { value: string } }) => setD((p: any) => ({ ...p, [k]: e.target.value === '' ? null : Number(e.target.value) })) })
-  const taPatch = (ta: number | null) => {
-    const sin = ta == null ? null : Math.round(ta / TA_VAT)
-    return { ta, ta_with_iva: ta, ta_without_iva: sin, iva_ta: ta == null || sin == null ? null : ta - sin }
-  }
+  const taPatch = taBreakdown
+  const hasTa = type === 'flight' || type === 'hotel'
+  const company = companies?.find(x => x.id === c.company_id)
+  // A TA typed by the user (or already stored on a record being edited) is never replaced by the company's TA unless the user asks for it.
+  const taManual = useRef(editing && (initial?.details as any)?.ta != null)
   const onCompany = (id: string) => {
     setC(p => ({ ...p, company_id: id }))
-    if (type === 'flight' || type === 'hotel') setD((p: any) => ({ ...p, ...taPatch(companies?.find(x => x.id === id)?.ta ?? null) }))
+    if (!hasTa) return
+    const next = taOnCompanyChange(d.ta, taManual.current, companies?.find(x => x.id === id)?.ta)
+    if (next !== 'keep') { taManual.current = false; setD((p: any) => ({ ...p, ...taPatch(next) })) }
   }
-  const onTa = (e: { target: { value: string } }) => setD((p: any) => ({ ...p, ...taPatch(e.target.value === '' ? null : Number(e.target.value)) }))
+  // New record opened with a company already chosen (or companies loading after the choice): apply the company's TA once, only if the form has none.
+  useEffect(() => {
+    if (!hasTa || editing || !company || taManual.current) return
+    const next = taOnCompanyChange(d.ta, false, company.ta)
+    if (next !== 'keep' && d.ta == null) setD((p: any) => (p.ta == null ? { ...p, ...taPatch(next) } : p))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.id, company?.ta])
+  const onTa = (e: { target: { value: string } }) => {
+    const v = e.target.value === '' ? null : Number(e.target.value)
+    taManual.current = v != null
+    setD((p: any) => ({ ...p, ...taPatch(v) }))
+  }
+  const useCompanyTa = () => { if (company?.ta == null) return; taManual.current = false; setD((p: any) => ({ ...p, ...taPatch(company.ta) })) }
   const onTotal = (e: { target: { value: string } }) => {
     setTotalTouched(true)
     setD((p: any) => ({ ...p, total_invoice: e.target.value === '' ? null : Number(e.target.value) }))
@@ -215,6 +230,11 @@ export default function ServiceForm({ type, initial, initialDocs, submitLabel = 
       <TextInput label="TA" type="number" min={0} value={d.ta ?? ''} onChange={onTa} />
       <TextInput label="TA sin IVA" {...nv('ta_without_iva')} />
       <TextInput label="IVA incluido en TA" {...nv('iva_ta')} />
+      {company && (company.ta == null
+        ? <p className="text-xs text-amber-700 dark:text-amber-300 sm:col-span-2">Esta empresa no tiene TA configurado: el cálculo automático no puede aplicarse. Configúralo en Empresas (Editar) o escribe el TA a mano.</p>
+        : d.ta === company.ta
+          ? <p className="text-xs text-muted sm:col-span-2">TA de la empresa aplicado ({money(company.ta)}). Puedes modificarlo.</p>
+          : <p className="text-xs text-muted sm:col-span-2">TA de la empresa: {money(company.ta)}. <button type="button" className="text-brand" onClick={useCompanyTa}>Usar TA de la empresa</button></p>)}
     </>
   )
   const totalField = (

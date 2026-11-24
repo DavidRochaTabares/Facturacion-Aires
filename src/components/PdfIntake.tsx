@@ -20,7 +20,7 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState<string | null>(null)
   const [stage, setStage] = useState<Stage>('idle')
-  const [result, setResult] = useState<{ provider?: string; amount?: number; details: any } | null>(null)
+  const [result, setResult] = useState<{ provider?: string; amount?: number; details: any; warnings?: string[] } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const title = `Nuevo ${LABEL[type]} desde PDF`
@@ -83,6 +83,7 @@ export default function PdfIntake({ type, onBack }: { type: 'flight' | 'hotel'; 
           {stage === 'done' && (
             <>
               <p className="text-sm text-muted mb-4">{result ? 'Información extraída. Corrige y completa lo que falte antes de guardar.' : 'Diligencia el formulario manualmente.'}</p>
+              {!!result?.warnings?.length && <div role="status" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200"><p className="font-medium">Revisión manual recomendada</p><ul className="mt-1 list-disc pl-5">{result.warnings.map(w => <li key={w}>{w}</li>)}</ul></div>}
               <ServiceForm key={type + (result?.details.booking_code ?? result?.details.reservation_number ?? 'manual')} type={type} initial={initial} busy={busy} onCancel={reset}
                 initialDocs={file ? [{ file, category: 'ticket' }] : []}
                 onSubmit={async (v, docs) => { setBusy(true); await dataService.createOperation(v, docs); nav(SECTIONS[type].path) }} />

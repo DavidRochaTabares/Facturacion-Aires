@@ -43,11 +43,63 @@ const cop = (amount: number | null, currency: unknown): number | null => {
 const DOC_TYPES = ['CC', 'CE', 'TI', 'PA', 'NIT']
 const list = (v: unknown, max: number): any[] => (Array.isArray(v) ? v.slice(0, max) : [])
 
+type Seg = { id: string; flight_number: string; origin: string; destination: string; departure_date: string; departure_time: string; arrival_date: string; arrival_time: string; cabin: string }
+const dayDiff = (a: string, b: string) => (a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : null)
+
+/**
+ * Splits an itinerary into outbound legs and the return journey. A round trip is ONE record: the return is a DATE of the same flight, never a second flight.
+ * Only a clear structure is accepted (the last leg lands where the first one departed, with one clear turning point); anything else is left untouched and
+ * reported in `warnings` so the agency reviews it by hand. Connections (same-day continuation) are never taken for a return.
+ */
+export function splitRoundTrip(segs: Seg[], directions: string[], modelReturn: string, tripType: string): { outbound: Seg[]; returnDate: string; warning?: string } {
+  const none = (warning?: string) => ({ outbound: segs, returnDate: '', warning })
+  const n = segs.length
+  if (n === 0) return none()
+  const first = segs[0], last = segs[n - 1]
+  if (n === 1) {
+    // Only the outbound leg is listed; the document states the return date separately.
+    if (modelReturn && first.departure_date && modelReturn >= first.departure_date && tripType !== 'oneway') return { outbound: segs, returnDate: modelReturn }
+    return none()
+  }
+  const returnsToOrigin = !!first.origin && last.destination === first.origin
+  if (!returnsToOrigin) {
+    if (tripType === 'roundtrip' || modelReturn) return none('El documento parece de ida y regreso pero el itinerario no vuelve al origen: revisa la fecha de regreso manualmente.')
+    return none() // connections / multi-city / one-way: structure kept as is
+  }
+  // candidate turning points: the next leg starts where the previous one ended, on a later day (a stay), and the trip ends at the origin
+  const candidates: number[] = []
+  for (let i = 1; i < n; i++) {
+    const gap = dayDiff(segs[i - 1].departure_date, segs[i].departure_date)
+    if (segs[i].origin === segs[i - 1].destination && gap != null && gap >= 1) candidates.push(i)
+  }
+  const dirTurn = (() => {
+    const t = directions.findIndex(d => d === 'return')
+    if (t < 1) return -1
+    return directions.slice(t).every(d => d === 'return') && directions.slice(0, t).every(d => d === 'outbound' || d === '') ? t : -1
+  })()
+  let turn = -1
+  if (n === 2 && segs[1].origin === first.destination) turn = 1 // A-B and B-A: unmistakably the return of the same trip (even on the same day)
+  else if (candidates.length === 1) turn = candidates[0]
+  else if (candidates.length === 0 && dirTurn >= 1 && segs[dirTurn].origin === segs[dirTurn - 1].destination) turn = dirTurn
+  else if (candidates.length > 1 && dirTurn >= 1 && candidates.includes(dirTurn)) turn = dirTurn
+  if (turn < 1) return none('El itinerario tiene varios trayectos y no es claro cuál es el regreso: revisa las fechas manualmente.')
+  if (dirTurn >= 1 && dirTurn !== turn) return none('La estructura del itinerario no coincide con la dirección indicada por el documento: revisa las fechas manualmente.')
+  const outbound = segs.slice(0, turn)
+  const returnDate = segs[turn].departure_date
+  if (!returnDate) return none('No se pudo leer con claridad la fecha de regreso: complétala manualmente.')
+  if (modelReturn && modelReturn !== returnDate) return { outbound, returnDate, warning: 'La fecha de regreso detectada difiere de la indicada en el documento: verifícala.' }
+  return { outbound, returnDate }
+}
+
 export function normalizeFlight(raw: any) {
-  const segments = list(raw?.segments, 12).map((s: any) => ({
+  const all: Seg[] = list(raw?.segments, 12).map((s: any) => ({
     id: rid(), flight_number: str(s?.flight_number), origin: str(s?.origin).toUpperCase(), destination: str(s?.destination).toUpperCase(),
     departure_date: isoDate(s?.departure_date), departure_time: hhmm(s?.departure_time), arrival_date: '', arrival_time: hhmm(s?.arrival_time), cabin: str(s?.cabin),
   }))
+  const directions = list(raw?.segments, 12).map((s: any) => str(s?.direction).toLowerCase())
+  const split = splitRoundTrip(all, directions, isoDate(raw?.return_date), str(raw?.trip_type).toLowerCase())
+  const warnings: string[] = split.warning ? [split.warning] : []
+  const segments: Seg[] = split.outbound.map((s, i, a) => (split.returnDate && i === a.length - 1 ? { ...s, arrival_date: split.returnDate } : s))
   if (!segments.length) segments.push({ id: rid(), flight_number: '', origin: '', destination: '', departure_date: '', departure_time: '', arrival_date: '', arrival_time: '', cabin: 'Economy' })
 
   const passengers = list(raw?.passengers, 20).map((p: any) => ({
@@ -56,18 +108,18 @@ export function normalizeFlight(raw: any) {
   }))
   if (!passengers.length) passengers.push({ id: rid(), names: '', surnames: '', document_type: 'CC', document_number: '', birth_date: '', email: '', phone: '', frequent_flyer: '', ticket_number: '' })
 
-  const chain = segments.length && segments[0].origin ? [segments[0].origin, ...segments.map(s => s.destination)].filter(Boolean).join('-') : ''
+  const chain = all.length && all[0].origin ? [all[0].origin, ...all.map(s => s.destination)].filter(Boolean).join('-') : ''
   // The value is the total of the whole reservation; the app divides it among the passengers when saving.
   const paxAmounts = list(raw?.passengers, 20).map((p: any) => cop(num(p?.total_amount), raw?.currency))
   const paxSum = paxAmounts.length && paxAmounts.every(v => v != null) ? paxAmounts.reduce((acc: number, v) => acc + (v as number), 0) : null
   const value = cop(num(raw?.total_amount), raw?.currency) ?? paxSum
-  const last = segments[segments.length - 1]
   return {
+    warnings,
     provider: str(raw?.provider),
     amount: value ?? 0,
     details: {
       no: '', first_surname: passengers[0].surnames, names: passengers[0].names, route: str(raw?.route) || chain,
-      departure_date: segments[0].departure_date, return_date: segments.length > 1 ? last.departure_date : '',
+      departure_date: segments[0].departure_date, return_date: split.returnDate,
       airline: str(raw?.airline), booking_code: str(raw?.booking_code), internal_booking_code: '', ticket_number: str(raw?.ticket_number),
       value_with_taxes_tae: value, total_invoice: null, third_party_commission: null, provider_profit: null,
       ta: null, ta_without_iva: null, ta_with_iva: null, iva_ta: null, net_quote_minus_iva_ta: null, card_number: '', purchase_invoice: '',

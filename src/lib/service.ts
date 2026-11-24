@@ -17,6 +17,22 @@ export const GROUPABLE: OperationType[] = ['flight', 'hotel']
 export const MARKUP: Partial<Record<OperationType, number>> = { flight: 1.3, hotel: 1.3, loan: 1.2, food: 1.2 }
 export const suggestCharge = (cost: number, type: OperationType) => Math.round((cost || 0) * (MARKUP[type] ?? 1))
 export const TA_VAT = 1.19
+
+/** TA breakdown (single source of truth): TA includes IVA, so the base is TA / 1.19 and the IVA is the difference. */
+export function taBreakdown(ta: number | null) {
+  const sin = ta == null ? null : Math.round(ta / TA_VAT)
+  return { ta, ta_with_iva: ta, ta_without_iva: sin, iva_ta: ta == null || sin == null ? null : ta - sin }
+}
+
+/**
+ * What to do with the TA of a form when a company is picked. The company's configured TA is only applied when it exists and the form has no TA
+ * typed by the user: a manual TA is never overwritten, and a company without a configured TA never wipes the current value.
+ */
+export function taOnCompanyChange(current: number | null | undefined, manual: boolean, companyTa: number | null | undefined): 'keep' | number {
+  if (companyTa == null) return 'keep'
+  if (current != null && manual) return 'keep'
+  return companyTa
+}
 export const LOAN_IVA = 0.19
 /** IVA (19%) of a loan's base value, in whole pesos. The base is never modified: IVA is always derived from it, so it cannot be applied twice. */
 export const loanIva = (base: number) => Math.round((base || 0) * LOAN_IVA)

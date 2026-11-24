@@ -17,12 +17,14 @@ El documento es una emisión de tiquete aéreo. Devuelve exactamente este objeto
   "booking_code": "código de reserva / localizador (PNR)",
   "ticket_number": "número de tiquete",
   "route": "ruta con códigos IATA separados por guion, por ejemplo BOG-MDE-BOG, solo si se puede determinar",
+  "trip_type": "oneway si es solo ida, roundtrip si es ida y regreso del mismo itinerario, multicity si son trayectos distintos o abiertos; \"\" si no es claro",
+  "return_date": "fecha en que SALE el primer vuelo del regreso (YYYY-MM-DD), solo si el documento muestra claramente un regreso; null si es solo ida, si solo hay conexiones o si no es claro",
   "total_amount": número con el valor total de TODA la reserva (todos los pasajeros juntos) incluyendo impuestos y tasas,
   "currency": "moneda del valor total",
-  "segments": [ { "flight_number": "", "origin": "código IATA o ciudad", "destination": "código IATA o ciudad", "departure_date": "", "departure_time": "", "arrival_time": "", "cabin": "clase o cabina" } ],
+  "segments": [ { "flight_number": "", "origin": "código IATA o ciudad", "destination": "código IATA o ciudad", "departure_date": "", "departure_time": "", "arrival_time": "", "cabin": "clase o cabina", "direction": "outbound si pertenece a la ida, return si pertenece al regreso, \"\" si no es claro" } ],
   "passengers": [ { "names": "nombres", "surnames": "apellidos", "document_type": "CC, CE, TI, PA o NIT", "document_number": "", "birth_date": "", "email": "", "phone": "", "frequent_flyer": "", "ticket_number": "tiquete de este pasajero", "total_amount": número con el valor del tiquete de ESTE pasajero, solo si el documento lo muestra por pasajero } ]
 }
-Un objeto por cada tramo (en orden) y uno por cada pasajero. En los tiquetes el nombre suele venir como APELLIDO/NOMBRE: sepáralo correctamente en apellidos y nombres.`,
+Un objeto por cada tramo (en orden cronológico, incluidos los del regreso) y uno por cada pasajero. Una escala o conexión (mismo viaje, el siguiente vuelo sale del destino del anterior poco después) NO es un regreso: el regreso es el viaje de vuelta hacia el origen, normalmente en otra fecha. No inventes fechas ni conviertas una conexión en regreso; ante la duda deja trip_type, return_date y direction vacíos. En los tiquetes el nombre suele venir como APELLIDO/NOMBRE: sepáralo correctamente en apellidos y nombres.`,
 
   hotel: `${RULES}
 

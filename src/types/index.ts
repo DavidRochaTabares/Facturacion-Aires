@@ -248,7 +248,7 @@ export type BankMovementRow = BankMovement & { documents: BankDocument[] }
 export interface BankFilters { search?: string; kind?: BankKind | ''; movement_type?: string; date_from?: string; date_to?: string }
 export interface BankReport { count: number; total_amount: number; by_type: Slice[]; last_date: string }
 
-export interface ExtractedFlight { provider?: string; amount: number; details: FlightData }
+export interface ExtractedFlight { provider?: string; amount: number; details: FlightData; warnings?: string[] }
 export interface ExtractedHotel { provider?: string; amount?: number; details: HotelData }
 export interface ExtractedFood { date?: string; provider?: string; details: Partial<FoodData> }
 export interface ExtractedLoan { date?: string; provider?: string; amount?: number; invoice_number?: string; details: Partial<LoanData> }
