@@ -300,7 +300,7 @@ export default function ServiceForm({ type, initial, initialDocs, submitLabel = 
           </Select>
           <TextInput label={type === 'food' ? 'Fecha de solicitud *' : 'Fecha *'} error={err.date} type="date" {...sc('date')} />
           <SupplierSelect label={type === 'transport' ? 'Proveedor *' : 'Proveedor'} error={err.provider} value={c.provider} onChange={v => setC(p => ({ ...p, provider: v }))} suppliers={suppliers} />
-          {(type === 'loan' || typeLabel) && <TextInput label="Factura" warn={warn('Factura')} {...sc('invoice_number')} />}
+          {(type === 'loan' || type === 'hotel' || typeLabel) && <TextInput label="Factura" warn={warn('Factura')} {...sc('invoice_number')} />}
           </div>
         </>
       )}

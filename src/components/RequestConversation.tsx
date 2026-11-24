@@ -3,8 +3,9 @@ import { Copy, KeyRound, Lock, LockOpen, MessageCircle, Paperclip, Send, Trash2,
 import { copyText } from '../lib/clipboard'
 import { companyAccessAdmin } from '../services/companyPortal'
 import { requestsService, type CleanupResult } from '../services/requests'
-import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment } from '../types/requests'
+import { displayStatus, typeLabel, type ClientRequestFull, type RequestAttachment, type RequestMessage } from '../types/requests'
 import { AdminBadge, ADMIN_BUBBLE, parseAdmin } from './AdminMessage'
+import { jumpToMessage, MessageRow, previewOf, QuoteBlock, ReplyBar } from './MessageReply'
 import { ApprovalPanel } from './ApprovalPanel'
 import { AttachmentCard, PendingFiles, type UrlResolver } from './AttachmentPreview'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -67,6 +68,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [sending, setSending] = useState(false)
+  const [replyTo, setReplyTo] = useState<RequestMessage | null>(null)
   const [sendError, setSendError] = useState('')
   const [action, setAction] = useState<Action | null>(null)
   const [busy, setBusy] = useState(false)
@@ -90,7 +92,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
     } catch (e) { if (!quiet) setLoadError(e instanceof Error ? e.message : 'No se pudo cargar la conversación.') }
   }, [id])
 
-  useEffect(() => { setFull(null); setLoadError(''); setNotice(''); setText(''); setFiles([]); setSendError(''); lastCount.current = 0; if (id) load() }, [id, load])
+  useEffect(() => { setFull(null); setLoadError(''); setNotice(''); setText(''); setFiles([]); setSendError(''); setReplyTo(null); lastCount.current = 0; if (id) load() }, [id, load])
   useEffect(() => {
     if (!id) return
     const tick = () => { if (document.visibilityState === 'visible') load(true) }
@@ -108,7 +110,7 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
     e.preventDefault()
     if (!id || sending || (!text.trim() && !files.length)) return
     setSending(true); setSendError('')
-    try { await requestsService.postMessage(id, text.trim(), files); setText(''); setFiles([]); await load(true); onChanged() }
+    try { await requestsService.postMessage(id, text.trim(), files, replyTo?.id); setText(''); setFiles([]); setReplyTo(null); await load(true); onChanged() }
     catch (err) { setSendError(err instanceof Error ? err.message : 'No se pudo enviar.') } finally { setSending(false) }
   }
 
@@ -131,6 +133,10 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
   }
 
   const closed = full?.status === 'closed'
+  const byId = new Map((full?.messages ?? []).map(m => [m.id, m]))
+  const labelOf = (m: RequestMessage) => (m.author === 'agency' ? 'Agencia' : parseAdmin(m.author, m.body).admin ? 'Administrador' : full?.client_name || 'Cliente')
+  const textOf = (m: RequestMessage) => previewOf(m, (full?.attachments ?? []).filter(a => a.message_id === m.id).map(a => a.file_name))
+  const startReply = (m: RequestMessage) => { setReplyTo(m); area.current?.focus() }
   const st = full ? displayStatus(full) : null
   const d = full?.details ?? {}
   const facts: [string, string][] = full ? ([
@@ -237,18 +243,20 @@ export default function RequestConversation({ id, onClose, onChanged }: { id: st
               <div ref={bottom} className="max-h-[60dvh] space-y-3 overflow-y-auto rounded-lg border border-line p-3">
                 {full.messages.length === 0 && <p className="py-4 text-center text-sm text-muted">Aún no hay mensajes.</p>}
                 {full.messages.map(m => { const { admin, text: body } = parseAdmin(m.author, m.body); return (
-                  <div key={m.id} className={`flex ${m.author === 'agency' ? 'justify-end' : 'justify-start'}`}>
+                  <MessageRow key={m.id} id={m.id} right={m.author === 'agency'} onReply={() => startReply(m)}>
                     <div className={`group max-w-[88%] rounded-2xl px-3 py-2 text-sm ${admin ? `${ADMIN_BUBBLE} rounded-bl-sm` : m.author === 'agency' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
                       {admin && <AdminBadge />}
+                      {m.reply_to && (() => { const q = byId.get(m.reply_to); return <QuoteBlock label={q ? labelOf(q) : ''} text={q ? textOf(q) : ''} deleted={!q} onJump={() => jumpToMessage(m.reply_to!)} dark={admin || m.author === 'agency'} /> })()}
                       <div className="mb-0.5 flex items-center justify-between gap-3"><p className={`text-[11px] font-medium ${admin ? 'opacity-90' : m.author === 'agency' ? 'opacity-80' : 'text-muted'}`}>{m.author === 'agency' ? 'Agencia' : admin ? 'Administrador' : full.client_name} · {when(m.created_at)}</p>
                         <button type="button" title="Eliminar mensaje" aria-label="Eliminar mensaje" onClick={() => { setActionError(''); setAction({ kind: 'del-message', id: m.id }) }} className="opacity-60 hover:opacity-100"><Trash2 size={12} /></button></div>
                       {body && <p className="whitespace-pre-wrap break-words">{body}</p>}
                       {full.attachments.some(a => a.message_id === m.id) && <ul className="mt-2 space-y-1 text-fg">{full.attachments.filter(a => a.message_id === m.id).map(a => attBtn(a, true))}</ul>}
                     </div>
-                  </div>)})}
+                  </MessageRow>)})}
               </div>
               {closed ? <p className="mt-3 flex items-center gap-2 rounded-lg bg-surface2 p-3 text-sm"><Lock size={14} />Conversación cerrada. Reábrela para volver a responder.</p> : (
                 <form onSubmit={send} className="mt-3 space-y-2">
+                  {replyTo && <ReplyBar label={labelOf(replyTo)} text={textOf(replyTo)} onCancel={() => setReplyTo(null)} />}
                   <PendingFiles files={files} disabled={sending} onRemove={i => setFiles(x => x.filter((_, j) => j !== i))} />
                   {sendError && <p role="alert" className="text-sm text-red-500">{sendError}</p>}
                   <div className="flex items-end gap-1 rounded-3xl border border-line bg-surface2 p-1 transition focus-within:border-brand">

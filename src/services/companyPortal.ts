@@ -98,8 +98,8 @@ export const companyPortal = {
     const { error } = await supabase.rpc('company_decide', { p_id: id, p_decision: decision, p_note: note })
     if (error) fail(error)
   },
-  async post(id: string, body: string) {
-    const { error } = await supabase.rpc('company_post_message', { p_id: id, p_body: body })
+  async post(id: string, body: string, replyTo?: string | null) {
+    const { error } = await supabase.rpc('company_post_message', { p_id: id, p_body: body, p_reply_to: replyTo ?? null })
     if (error) fail(error)
   },
   /** Short-lived signed URL (private bucket); Storage policies only allow files of conversations of the administrator's own company. */

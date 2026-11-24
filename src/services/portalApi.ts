@@ -56,9 +56,10 @@ export const portalApi = {
     for (const [k, v] of Object.entries(files)) f.append(k, v, v.name)
     return call<{ ok: true; id: string }>(token, f)
   },
-  message(token: string, body: string, files: File[]) {
+  message(token: string, body: string, files: File[], replyTo?: string | null) {
     const f = new FormData()
     f.append('action', 'message'); f.append('body', body)
+    if (replyTo) f.append('reply_to', replyTo)
     files.forEach((file, i) => f.append(`file_${i}`, file, file.name))
     return call<{ ok: true; id: string }>(token, f)
   },

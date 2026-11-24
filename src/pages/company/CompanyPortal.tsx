@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Check, Eye, EyeOff, LogOut, MessageSquare, Moon, Send, Sun, X } from 'lucide-react'
 import { AdminBadge, ADMIN_BUBBLE, parseAdmin } from '../../components/AdminMessage'
+import { jumpToMessage, MessageRow, previewOf, QuoteBlock, ReplyBar } from '../../components/MessageReply'
 import { AttachmentCard, type UrlResolver } from '../../components/AttachmentPreview'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { detailFacts } from '../../components/RequestConversation'
@@ -11,7 +12,7 @@ import { ACTIVATION_TOKEN, AUTH_LINK_ERROR, OPENED_FROM_RECOVERY_LINK } from '..
 import { supabase } from '../../lib/supabase'
 import { companyPortal } from '../../services/companyPortal'
 import { APPROVAL_ACTION_LABEL, APPROVAL_CLS, APPROVAL_LABEL, type ApprovalStatus, type CompanyConversation, type CompanyConversationRow, type CompanyPortalMe } from '../../types/company'
-import { typeLabel, type RequestAttachment, type RequestPassenger } from '../../types/requests'
+import { typeLabel, type RequestAttachment, type RequestMessage, type RequestPassenger } from '../../types/requests'
 
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—')
 const dmy = (d?: string | number) => (d ? new Date(`${d}T00:00:00`).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '')
@@ -154,6 +155,8 @@ function ConversationDetail({ id, onClose, onChanged }: { id: string | null; onC
   const [actionError, setActionError] = useState('')
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [replyTo, setReplyTo] = useState<RequestMessage | null>(null)
+  const area = useRef<HTMLTextAreaElement>(null)
   const [sendError, setSendError] = useState('')
   const list = useRef<HTMLDivElement>(null)
   const lastCount = useRef(0)
@@ -163,7 +166,7 @@ function ConversationDetail({ id, onClose, onChanged }: { id: string | null; onC
     try { setData(await companyPortal.get(id)); setLoadError('') }
     catch (e) { if (!quiet) setLoadError(e instanceof Error ? e.message : 'No se pudo cargar la conversación.') }
   }, [id])
-  useEffect(() => { setData(null); setLoadError(''); setNote(''); setText(''); setSendError(''); setActionError(''); lastCount.current = 0; if (id) load() }, [id, load])
+  useEffect(() => { setData(null); setLoadError(''); setNote(''); setText(''); setSendError(''); setActionError(''); setReplyTo(null); lastCount.current = 0; if (id) load() }, [id, load])
   useEffect(() => {
     if (!id) return
     const tick = () => { if (document.visibilityState === 'visible') load(true) }
@@ -175,6 +178,10 @@ function ConversationDetail({ id, onClose, onChanged }: { id: string | null; onC
 
   const resolve: UrlResolver = a => companyPortal.signedUrl(data?.attachments.find(x => x.id === a.id)?.storage_path ?? '', a.file_name)
   const r = data?.request
+  const byId = new Map((data?.messages ?? []).map(m => [m.id, m]))
+  const labelOf = (m: RequestMessage) => (parseAdmin(m.author, m.body).admin ? 'Tú' : m.author === 'agency' ? 'Aires y Destinos' : r?.employee_name || 'Empleado')
+  const textOf = (m: RequestMessage) => previewOf(m, (data?.attachments ?? []).filter(a => a.message_id === m.id).map(a => a.file_name))
+  const startReply = (m: RequestMessage) => { setReplyTo(m); area.current?.focus() }
   const pending = r?.approval_status === 'pending_approval'
   const mainPassengers = data?.passengers.filter(p => !p.item_id) ?? []
   const mainFiles = data?.attachments.filter(a => !a.item_id && a.kind !== 'message') ?? []
@@ -191,7 +198,7 @@ function ConversationDetail({ id, onClose, onChanged }: { id: string | null; onC
     e.preventDefault()
     if (!id || sending || !text.trim()) return
     setSending(true); setSendError('')
-    try { await companyPortal.post(id, text.trim()); setText(''); await load(true); onChanged() }
+    try { await companyPortal.post(id, text.trim(), replyTo?.id); setText(''); setReplyTo(null); await load(true); onChanged() }
     catch (err) { setSendError(err instanceof Error ? err.message : 'No se pudo enviar.') } finally { setSending(false) }
   }
 
@@ -232,20 +239,22 @@ function ConversationDetail({ id, onClose, onChanged }: { id: string | null; onC
               <div ref={list} className="max-h-[50dvh] space-y-3 overflow-y-auto rounded-lg border border-line p-3">
                 {data.messages.length === 0 && <p className="py-4 text-center text-sm text-muted">Aún no hay mensajes.</p>}
                 {data.messages.map(m => { const { admin, text: body } = parseAdmin(m.author, m.body); return (
-                  <div key={m.id} className={`flex ${m.author === 'agency' ? 'justify-start' : 'justify-end'}`}>
+                  <MessageRow key={m.id} id={m.id} right={m.author !== 'agency'} onReply={() => startReply(m)}>
                     <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${admin ? `${ADMIN_BUBBLE} rounded-br-sm` : m.author === 'agency' ? 'bg-surface2 rounded-bl-sm' : 'bg-brand text-white dark:text-slate-900 rounded-br-sm'}`}>
                       {admin && <AdminBadge />}
+                      {m.reply_to && (() => { const q = byId.get(m.reply_to); return <QuoteBlock label={q ? labelOf(q) : ''} text={q ? textOf(q) : ''} deleted={!q} onJump={() => jumpToMessage(m.reply_to!)} dark={admin || m.author !== 'agency'} /> })()}
                       <p className={`mb-0.5 text-[11px] font-medium ${admin ? 'opacity-90' : m.author === 'agency' ? 'text-muted' : 'opacity-80'}`}>{admin ? 'Tú' : m.author === 'agency' ? 'Aires y Destinos' : r.employee_name} · {when(m.created_at)}</p>
                       {body && <p className="whitespace-pre-wrap break-words">{body}</p>}
                       {data.attachments.filter(a => a.message_id === m.id).map(a => <div key={a.id} className="mt-2 w-72 max-w-full"><AttachmentCard att={a} resolve={resolve} auto /></div>)}
                     </div>
-                  </div>)})}
+                  </MessageRow>)})}
               </div>
               {r.closed ? <p className="mt-3 rounded-lg bg-surface2 p-3 text-sm">Conversación cerrada: ya no se pueden enviar mensajes.</p> : (
                 <form onSubmit={send} className="mt-3 space-y-2">
                   {sendError && <p role="alert" className="text-sm text-red-500">{sendError}</p>}
+                  {replyTo && <ReplyBar label={labelOf(replyTo)} text={textOf(replyTo)} onCancel={() => setReplyTo(null)} />}
                   <div className="flex items-end gap-1 rounded-3xl border border-line bg-surface2 p-1 transition focus-within:border-brand">
-                    <textarea rows={1} placeholder="Escribe a Aires y Destinos…" aria-label="Mensaje" value={text} maxLength={4900} onChange={e => setText(e.target.value)}
+                    <textarea ref={area} rows={1} placeholder="Escribe a Aires y Destinos…" aria-label="Mensaje" value={text} maxLength={4900} onChange={e => setText(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit() } }}
                       className="max-h-32 min-h-10 min-w-0 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm leading-5 text-fg outline-none placeholder:text-muted" />
                     <button type="submit" disabled={sending || !text.trim()} aria-label="Enviar mensaje" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-white shadow-sm transition hover:opacity-90 disabled:opacity-40 dark:text-slate-900">{sending ? <Spinner /> : <Send size={18} />}</button>

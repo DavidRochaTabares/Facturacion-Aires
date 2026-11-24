@@ -16,7 +16,7 @@ export interface RequestAttachment {
   id: string; kind: 'identity' | 'supporting' | 'message'; passenger_id: string | null; message_id: string | null; item_id?: string | null
   file_name: string; mime_type: string; size_bytes: number; uploaded_by: 'client' | 'agency'; created_at: string; storage_path?: string
 }
-export interface RequestMessage { id: string; author: 'client' | 'agency'; body: string; created_at: string }
+export interface RequestMessage { id: string; author: 'client' | 'agency'; body: string; created_at: string; reply_to?: string | null }
 
 /** What the agency sees in the inbox. */
 export interface ClientRequestRow {

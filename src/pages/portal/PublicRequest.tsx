@@ -4,12 +4,13 @@ import spineDay from '../../assets/spinedev-day.png'
 import spineNight from '../../assets/spinedev-night.png'
 import { AttachmentCard, forgetPreview, PendingFiles, type UrlResolver } from '../../components/AttachmentPreview'
 import { AdminBadge, ADMIN_BUBBLE, parseAdmin } from '../../components/AdminMessage'
+import { jumpToMessage, MessageRow, previewOf, QuoteBlock, ReplyBar } from '../../components/MessageReply'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { AgencyLogo, Spinner } from '../../components/ui'
 import { useTheme } from '../../hooks'
 import { normalizeDocFile } from '../../lib/files'
 import { PortalError, portalApi, TOKEN_RE } from '../../services/portalApi'
-import { typeLabel, type PortalData, type PortalItem, type RequestAttachment } from '../../types/requests'
+import { typeLabel, type PortalData, type PortalItem, type RequestAttachment, type RequestMessage } from '../../types/requests'
 import { PortalForm, type PortalFormInitial } from './PortalForm'
 
 /** Shared field→label mapping for request/item details so every service renders only its own facts. */
@@ -173,6 +174,7 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
   const [delBusy, setDelBusy] = useState(false)
   const [delError, setDelError] = useState('')
   const [sent, setSent] = useState(false)
+  const [replyTo, setReplyTo] = useState<RequestMessage | null>(null)
   // Which form is open: the main request ('main'), a new requirement ('add') or editing one item (its PortalItem).
   const [form, setForm] = useState<null | 'main' | 'add' | PortalItem>(null)
   const input = useRef<HTMLInputElement>(null)
@@ -226,11 +228,15 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
     e.preventDefault()
     if (busy || (!text.trim() && !files.length)) return
     setBusy(true); setError(''); setSent(false)
-    try { await portalApi.message(token, text.trim(), files); setText(''); setFiles([]); setSent(true); nearBottom.current = true; listNear.current = true; await reload(true); setTimeout(() => setSent(false), 2500) }
+    try { await portalApi.message(token, text.trim(), files, replyTo?.id); setText(''); setFiles([]); setReplyTo(null); setSent(true); nearBottom.current = true; listNear.current = true; await reload(true); setTimeout(() => setSent(false), 2500) }
     catch (err) { setError(err instanceof Error ? err.message : 'No se pudo enviar el mensaje.'); if (err instanceof PortalError && err.status === 409) reload(true) } finally { setBusy(false) }
   }
 
   const attOf = (id: string) => attachments.filter(a => a.message_id === id)
+  const byId = new Map(messages.map(m => [m.id, m]))
+  const labelOf = (m: RequestMessage) => (parseAdmin(m.author, m.body).admin ? 'Administrador' : m.author === 'client' ? 'Tú' : 'Aires y Destinos')
+  const textOf = (m: RequestMessage) => previewOf(m, attOf(m.id).map(a => a.file_name))
+  const startReply = (m: RequestMessage) => { setReplyTo(m); area.current?.focus() }
   const summary: [string, string][] = [['Tipo', typeLabel(r.request_type)], ['Enviada', when(r.submitted_at ?? r.created_at)], ...factsOf(r.details)]
   const general = attachments.filter(a => a.kind === 'supporting')
 
@@ -303,14 +309,15 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
           <div ref={content} className="space-y-3">
             {messages.length === 0 && <p className="py-6 text-center text-sm text-muted">{r.client_name.trim() ? `Hola, ${r.client_name.trim().split(' ')[0]}. ` : 'Hola. '}{r.submitted_at ? 'Tu solicitud fue enviada. La agencia te responderá aquí.' : 'Escríbenos lo que necesitas: la agencia te responderá en este mismo chat.'}</p>}
             {messages.map(m => { const { admin, text: body } = parseAdmin(m.author, m.body); return (
-              <div key={m.id} className={`flex ${m.author === 'client' && !admin ? 'justify-end' : 'justify-start'}`}>
+              <MessageRow key={m.id} id={m.id} right={m.author === 'client' && !admin} onReply={() => startReply(m)}>
                 <div className={`min-w-0 max-w-[88%] rounded-2xl px-3 py-2 text-sm ${admin ? `${ADMIN_BUBBLE} rounded-bl-sm` : m.author === 'client' ? 'bg-brand text-white dark:text-slate-900 rounded-br-sm' : 'bg-surface2 rounded-bl-sm'}`}>
                   {admin && <AdminBadge />}
+                  {m.reply_to && (() => { const q = byId.get(m.reply_to); return <QuoteBlock label={q ? labelOf(q) : ''} text={q ? textOf(q) : ''} deleted={!q} onJump={() => jumpToMessage(m.reply_to!)} dark={admin || m.author === 'client'} /> })()}
                   <p className={`mb-0.5 text-[11px] font-medium ${admin ? 'opacity-90' : m.author === 'client' ? 'opacity-80' : 'text-muted'}`}>{admin ? 'Administrador' : m.author === 'client' ? 'Tú' : 'Aires y Destinos'} · {when(m.created_at)}</p>
                   {body && <p className="whitespace-pre-wrap break-words">{body}</p>}
                   <AttachmentList items={attOf(m.id)} resolve={resolve} auto canRemove={mine} onRemove={a => { setDelError(''); setDeleting(a) }} />
                 </div>
-              </div>
+              </MessageRow>
             )})}
           </div>
         </div>
@@ -320,6 +327,7 @@ function Conversation({ token, data, reload, onBack }: { token: string; data: Po
             <p>Esta conversación está cerrada y ya no se pueden enviar mensajes ni archivos. Si necesitas continuar, contacta a la agencia.</p></div>
         ) : (
           <form onSubmit={send} className="sticky bottom-0 z-10 mt-3 shrink-0 space-y-2 border-t border-line bg-surface pb-1 pt-3">
+            {replyTo && <ReplyBar label={labelOf(replyTo)} text={textOf(replyTo)} onCancel={() => setReplyTo(null)} />}
             <PendingFiles files={files} disabled={busy} onRemove={i => setFiles(x => x.filter((_, j) => j !== i))} />
             {error && <p role="alert" className="text-sm text-red-500">{error}</p>}
             {sent && <p role="status" className="text-xs text-emerald-600 dark:text-emerald-400">Mensaje enviado.</p>}

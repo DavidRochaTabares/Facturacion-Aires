@@ -302,7 +302,8 @@ Deno.serve(async (req: Request) => {
 
     const up = await uploadAll(info.id, entries)
     if ('error' in up) return up.error
-    const r = await rpc('portal_post_message', { p_hash: hash, p_body: body, p_attachments: [...up.stored.values()] })
+    const replyTo = String(form.get('reply_to') ?? '')
+    const r = await rpc('portal_post_message', { p_hash: hash, p_body: body, p_attachments: [...up.stored.values()], p_reply_to: /^[0-9a-f-]{36}$/i.test(replyTo) ? replyTo : null })
     if (r.failed) { await removeObjects([...up.stored.values()].map(s => s.storage_path)); return r.code && PORTAL_ERRORS[r.code] ? fail409(r.code) : fail(500, 'No se pudo enviar el mensaje. Inténtalo de nuevo.') }
     return reply(200, { ok: true, id: r.data?.id })
   }

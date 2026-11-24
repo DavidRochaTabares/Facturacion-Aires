@@ -62,7 +62,7 @@ export const requestsService = {
     const [r, p, m, a, it] = await Promise.all([
       supabase.from('client_requests').select(`${LIST_COLS},observations,details,details_history,closed_at,closed_by,reopened_at`).eq('id', id).maybeSingle(),
       supabase.from('client_request_passengers').select('id,first_names,last_names,document_type,document_number,birth_date,item_id').eq('request_id', id).order('position'),
-      supabase.from('client_request_messages').select('id,author,body,created_at').eq('request_id', id).order('created_at').order('id'),
+      supabase.from('client_request_messages').select('id,author,body,created_at,reply_to').eq('request_id', id).order('created_at').order('id'),
       supabase.from('client_request_attachments').select('id,kind,passenger_id,message_id,item_id,file_name,mime_type,size_bytes,uploaded_by,created_at,storage_path').eq('request_id', id).order('created_at'),
       supabase.from('client_request_items').select('id,request_type,description,observations,details,created_at').eq('request_id', id).order('position'),
     ])
@@ -92,7 +92,7 @@ export const requestsService = {
   async markRead(id: string) { const { error } = await supabase.rpc('mark_client_request_read', { p_id: id }); if (error) fail(error); queueRefresh() },
 
   /** Uploads the files to the private bucket first and registers the message afterwards; if anything fails, the uploaded files are removed again. */
-  async postMessage(id: string, body: string, files: File[]): Promise<void> {
+  async postMessage(id: string, body: string, files: File[], replyTo?: string | null): Promise<void> {
     const { data: s } = await supabase.auth.getSession()
     if (!s.session) throw new Error(SESSION_MSG)
     const uploaded: { storage_path: string; file_name: string; mime_type: string; size_bytes: number }[] = []
@@ -105,7 +105,7 @@ export const requestsService = {
         if (error) fail(error)
         uploaded.push({ storage_path, file_name: ok.name, mime_type: ok.type, size_bytes: ok.size })
       }
-      const { error } = await supabase.rpc('agency_post_message', { p_id: id, p_body: body, p_attachments: uploaded })
+      const { error } = await supabase.rpc('agency_post_message', { p_id: id, p_body: body, p_attachments: uploaded, p_reply_to: replyTo ?? null })
       if (error) fail(error)
       queueRefresh()
     } catch (e) {

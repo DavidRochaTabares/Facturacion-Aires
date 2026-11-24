@@ -80,3 +80,5 @@ input:not([type]),input[type=text],input[type=email],input[type=password],input[
 @keyframes portal-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @media (max-width:640px){.portal-bg i:nth-child(4),.portal-bg i:nth-child(5){display:none}}
 @media (prefers-reduced-motion:reduce){.portal-bg i:nth-child(n),.portal-fade{animation:none}.portal-bg i{opacity:.8}}
+@keyframes msg-flash{0%,60%{box-shadow:0 0 0 3px rgb(var(--brand)/.55)}100%{box-shadow:0 0 0 0 transparent}}
+.msg-flash>div{animation:msg-flash 1.6s ease-out;border-radius:1rem}
